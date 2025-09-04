@@ -14,7 +14,7 @@ jobs:
 
       # Proveri da folder plugina postoji tačno ovako
       - name: Ensure plugin folder exists
-        run: test -d signaturemedia-silo-structure
+        run: test -d .
 
       - name: Create ZIP
         run: |
