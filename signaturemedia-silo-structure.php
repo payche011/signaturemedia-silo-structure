@@ -2,7 +2,7 @@
 /*
 Plugin Name: Signature Media Silo Structure
 Description: Enhanced silo content structure with toggleable features and additional content types.
-Version: 2.0.3
+Version: 2.0.4
 Author: signaturemedia
 Author URI: https://signaturemedia.com/
 Text Domain: signaturemedia-silo-structure
@@ -52,7 +52,7 @@ require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-mws-license-client.php';
 $mws_license = new MWS_License_Client( [
 	'product'       => 'signaturemedia-silo-structure', // = Product Slug na serveru
 	'api_base'      => 'https://licenses.signaturemedia.com/wp-json/mws/v1',
-	'option_prefix' => 'mws_silo',
+	'option_prefix' => 'signaturemedia-silo-structure',
 	'plugin_file'   => __FILE__,
 ] );
 $mws_license->init();

@@ -2,22 +2,17 @@
 /**
  * MWS License Client — drop-in klasa za klijentski WordPress plugin
  *
- * Primer upotrebe (u glavnom fajlu tvog plugina):
+ * Usage in your main plugin file:
  *
- * require_once __DIR__ . '/inc/class-mws-license-client.php';
+ * require_once __DIR__ . '/includes/class-mws-license-client.php';
  * $mws_license = new MWS_License_Client([
- *   'product'      => 'mws-silo', // isti slug kao na license serveru
- *   'api_base'     => 'https://licenses.tvojdomen.com/wp-json/mws/v1',
- *   'option_prefix'=> 'mws_silo', // prefiks za option ključeve
- *   'plugin_file'  => __FILE__,   // apsolutni put do glavnog fajla plugina
+ *   'product'       => 'signaturemedia-silo-structure', // must match product_slug on the license server
+ *   'api_base'      => 'https://licenses.signaturemedia.com/wp-json/mws/v1',
+ *   'option_prefix' => 'mws_silo',       // unique option prefix for this plugin
+ *   'plugin_file'   => __FILE__,         // absolute path to the main plugin file
+ *   // 'updates'     => 'server',        // OPTIONAL: enable server-driven updates; default 'none' (we use GitHub)
  * ]);
  * $mws_license->init();
- *
- * // (opciono) Ako želiš da blokiraš core funkcionalnosti kad licenca nije validna:
- * if ( ! $mws_license->is_valid() ) {
- *   add_action('admin_notices', function(){ echo '<div class="notice notice-error"><p>MWS Silo: Licenca nije aktivna.</p></div>'; });
- *   return; // prekini dalje učitavanje plugina
- * }
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
@@ -29,7 +24,8 @@ class MWS_License_Client {
 	/** @var string */ private $option_prefix;
 	/** @var string */ private $plugin_file;
 	/** @var string */ private $plugin_basename;
-	/** @var string */ private $slug; // folder/file bez ekstenzije
+	/** @var string */ private $slug;         // plugin folder name
+	/** @var string */ private $updates_mode; // 'none' (default) or 'server'
 
 	public function __construct( array $args ) {
 		$this->product         = isset( $args['product'] ) ? sanitize_key( $args['product'] ) : 'mws-silo';
@@ -37,26 +33,29 @@ class MWS_License_Client {
 		$this->option_prefix   = isset( $args['option_prefix'] ) ? sanitize_key( $args['option_prefix'] ) : 'mws_product';
 		$this->plugin_file     = isset( $args['plugin_file'] ) ? $args['plugin_file'] : __FILE__;
 		$this->plugin_basename = plugin_basename( $this->plugin_file );
-		$this->slug            = dirname( $this->plugin_basename ); // folder plugina
+		$this->slug            = dirname( $this->plugin_basename ); // e.g. signaturemedia-silo-structure
+		$this->updates_mode    = isset( $args['updates'] ) ? ( $args['updates'] === 'server' ? 'server' : 'none' ) : 'none';
 	}
 
 	public function init() : void {
-		// Settings stranica
+		// Settings
 		add_action( 'admin_menu', [ $this, 'register_settings_page' ] );
 		add_action( 'admin_post_' . $this->option_prefix . '_save_license', [ $this, 'handle_save_license' ] );
 
 		// Link u listi plugina
 		add_filter( 'plugin_action_links_' . $this->plugin_basename, [ $this, 'plugin_action_links' ] );
 
-		// Periodična validacija
+		// Periodična validacija (twice daily)
 		add_action( $this->option_prefix . '_validate_event', [ $this, 'schedule_validate' ] );
 		if ( ! wp_next_scheduled( $this->option_prefix . '_validate_event' ) ) {
 			wp_schedule_event( time() + 60, 'twicedaily', $this->option_prefix . '_validate_event' );
 		}
 
-		// Updater
-		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'inject_update' ] );
-		add_filter( 'plugins_api', [ $this, 'plugins_api' ], 10, 3 );
+		// OPTIONAL: Server-driven updater (disabled by default; GitHub updater lives in main plugin file)
+		if ( $this->updates_mode === 'server' ) {
+			add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'inject_update' ] );
+			add_filter( 'plugins_api', [ $this, 'plugins_api' ], 10, 3 );
+		}
 
 		// Deactivate hook → odjavi licencu
 		register_deactivation_hook( $this->plugin_file, [ $this, 'deactivate_license_remote' ] );
@@ -75,15 +74,15 @@ class MWS_License_Client {
 
 	public function plugin_action_links( array $links ) : array {
 		$url = admin_url( 'options-general.php?page=' . $this->option_prefix . '_license' );
-		array_unshift( $links, '<a href="' . esc_url( $url ) . '">' . esc_html__( 'License', 'default' ) . '</a>' );
+		array_unshift( $links, '<a href="' . esc_url( $url ) . '">' . esc_html__( 'License', 'signaturemedia-silo-structure' ) . '</a>' );
 		return $links;
 	}
 
 	public function render_settings_page() : void {
 		if ( ! current_user_can( 'manage_options' ) ) { return; }
-		$key   = get_option( $this->option_prefix . '_license_key', '' );
-		$stat  = get_option( $this->option_prefix . '_license_status', [] );
-		$valid = ! empty( $stat['valid'] );
+		$key        = get_option( $this->option_prefix . '_license_key', '' );
+		$stat       = get_option( $this->option_prefix . '_license_status', [] );
+		$valid      = ! empty( $stat['valid'] );
 		$last_error = get_option( $this->option_prefix . '_last_error', '-' );
 		?>
 		<div class="wrap">
@@ -96,7 +95,7 @@ class MWS_License_Client {
 						<th><label for="mws_license_key">License Key</label></th>
 						<td>
 							<input type="text" id="mws_license_key" name="license_key" class="regular-text" value="<?php echo esc_attr( $key ); ?>" />
-							<p class="description">Unesi ključ koji si dobio od SignatureMedia.</p>
+							<p class="description">Enter the license key provided by Signature Media.</p>
 						</td>
 					</tr>
 				</table>
@@ -139,7 +138,7 @@ class MWS_License_Client {
 		$args = [
 			'timeout' => 15,
 			'headers' => [ 'Accept' => 'application/json' ],
-			'body'    => $body,
+			'body'    => $body, // form-encoded okay for WP REST
 			'user-agent' => 'MWS-Client/' . $this->product . ' (' . home_url() . ')',
 		];
 		$url = trailingslashit( $this->api_base ) . ltrim( $endpoint, '/' );
@@ -230,15 +229,16 @@ class MWS_License_Client {
 		return isset( $plugin_data['Version'] ) ? (string) $plugin_data['Version'] : '0.0.0';
 	}
 
-	/* ===================== Updater ===================== */
+	/* ===================== Server-driven Updater (optional) ===================== */
 	public function inject_update( $transient ) {
+		if ( $this->updates_mode !== 'server' ) { return $transient; }
 		if ( empty( $transient ) || ! is_object( $transient ) ) { return $transient; }
 		$key = get_option( $this->option_prefix . '_license_key', '' );
 		if ( ! $key || ! $this->is_valid() ) { return $transient; }
 
-		$current  = $this->get_plugin_version();
+		$current   = $this->get_plugin_version();
 		$cache_key = $this->option_prefix . '_upd_' . md5( $current . '|' . $this->slug );
-		$data = get_transient( $cache_key );
+		$data      = get_transient( $cache_key );
 		if ( false === $data ) {
 			$data = $this->remote_get( 'update', [
 				'product'     => $this->product,
@@ -250,7 +250,7 @@ class MWS_License_Client {
 			set_transient( $cache_key, $data, HOUR_IN_SECONDS );
 		}
 		if ( is_wp_error( $data ) || empty( $data['version'] ) || empty( $data['download_url'] ) ) {
-			return $transient; // nema novog update-a
+			return $transient; // no update
 		}
 
 		if ( version_compare( $data['version'], $current, '>' ) ) {
@@ -267,10 +267,11 @@ class MWS_License_Client {
 	}
 
 	public function plugins_api( $result, $action, $args ) {
+		if ( $this->updates_mode !== 'server' ) { return $result; }
 		if ( $action !== 'plugin_information' || empty( $args->slug ) || $args->slug !== $this->slug ) {
 			return $result;
 		}
-		$key = get_option( $this->option_prefix . '_license_key', '' );
+		$key  = get_option( $this->option_prefix . '_license_key', '' );
 		$info = $this->remote_get( 'update', [
 			'product'     => $this->product,
 			'slug'        => $this->slug,
@@ -287,7 +288,7 @@ class MWS_License_Client {
 		$out->homepage = ! empty( $info['details_url'] ) ? $info['details_url'] : home_url();
 		$out->sections = [
 			'description' => '<p>Proprietary add-on.</p>',
-			'changelog'   => '<p>Pogledaj changelog: <a target="_blank" rel="noopener" href="' . esc_url( $out->homepage ) . '">detalji</a></p>',
+			'changelog'   => '<p>See changelog: <a target="_blank" rel="noopener" href="' . esc_url( $out->homepage ) . '">details</a></p>',
 		];
 		return $out;
 	}
