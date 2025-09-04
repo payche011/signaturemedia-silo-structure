@@ -1,0 +1,4 @@
+.silo-form { margin-bottom: 2em; }
+.form-field { margin-bottom: 1em; }
+.form-field label { display: block; margin-bottom: 0.5em; font-weight: 600; }
+.form-field input[type="text"] { min-width: 300px; padding: 8px; }
