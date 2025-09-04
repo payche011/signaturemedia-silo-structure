@@ -159,158 +159,30 @@ register_deactivation_hook( __FILE__, [ 'SignatureMedia_Silo_Structure', 'deacti
  * Lightweight GitHub Releases Updater (public repo)
  * - Single-file, cached, works alongside your license client.
  * - Only runs in wp-admin; optionally gated by license validity.
+ * - Supports optional GitHub token (to avoid 403 rate-limits) and pre-releases.
+ *   define('SM_SILO_GH_TOKEN', 'ghp_xxx');            // optional
+ *   define('SM_SILO_ALLOW_PRERELEASE', true);         // optional
+ *   define('SM_SILO_FORCE_AUTOUPDATE', true);         // optional
  * =========================================================
  */
 if ( ! class_exists( 'SignatureMedia_GH_Updater' ) ) :
 class SignatureMedia_GH_Updater {
-	private $plugin_file;
-	private $plugin_basename;
-	private $slug;
-	private $repo_user;
-	private $repo_name;
+	private $plugin_file, $plugin_basename, $slug, $repo_user, $repo_name, $allow_prerelease, $token;
 
-	public function __construct( string $plugin_file, string $repo_user, string $repo_name ) {
+	public function __construct( string $plugin_file, string $repo_user, string $repo_name, bool $allow_prerelease = false, string $token = '' ) {
 		$this->plugin_file     = $plugin_file;
 		$this->plugin_basename = plugin_basename( $plugin_file );
-		$this->slug            = dirname( $this->plugin_basename ); // plugin folder name
+		$this->slug            = dirname( $this->plugin_basename );
 		$this->repo_user       = $repo_user;
 		$this->repo_name       = $repo_name;
-	}
-
-	public function init() : void {
-		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'inject_update' ] );
-		add_filter( 'plugins_api', [ $this, 'plugins_api' ], 10, 3 );
-	}
-
-	private function current_version() : string {
-		$data = get_file_data( $this->plugin_file, [ 'Version' => 'Version' ] );
-		return isset( $data['Version'] ) ? (string) $data['Version'] : '0.0.0';
-	}
-
-	public function inject_update( $transient ) {
-		if ( empty( $transient ) || ! is_object( $transient ) ) {
-			return $transient;
-		}
-
-		// If repo not configured, bail early (keeps plugin lean until you set constants).
-		if ( empty( $this->repo_user ) || empty( $this->repo_name ) ) {
-			return $transient;
-		}
-
-		$current   = $this->current_version();
-		$cache_key = 'sm_gh_upd_' . md5( $this->repo_user . '/' . $this->repo_name . '|' . $current );
-		$resp      = get_transient( $cache_key );
-
-		if ( false === $resp ) {
-			$url  = "https://api.github.com/repos/{$this->repo_user}/{$this->repo_name}/releases/latest";
-			$resp = wp_remote_get( $url, [
-				'timeout' => 12,
-				'headers' => [
-					'Accept'     => 'application/vnd.github+json',
-					'User-Agent' => 'WordPress; ' . home_url(),
-				],
-			] );
-			set_transient( $cache_key, $resp, 30 * MINUTE_IN_SECONDS );
-		}
-
-		if ( is_wp_error( $resp ) ) {
-			return $transient;
-		}
-		if ( (int) wp_remote_retrieve_response_code( $resp ) !== 200 ) {
-			return $transient;
-		}
-
-		$data = json_decode( wp_remote_retrieve_body( $resp ), true );
-		$tag  = isset( $data['tag_name'] ) ? ltrim( (string) $data['tag_name'], 'v' ) : null;
-		if ( ! $tag || ! version_compare( $tag, $current, '>' ) ) {
-			return $transient;
-		}
-
-		// Prefer a proper asset ZIP (top-level folder must match the plugin folder name).
-		$zip = '';
-		if ( ! empty( $data['assets'] ) && is_array( $data['assets'] ) ) {
-			foreach ( $data['assets'] as $a ) {
-				$u = isset( $a['browser_download_url'] ) ? (string) $a['browser_download_url'] : '';
-				if ( $u && preg_match( '/\.zip$/i', $u ) ) {
-					$zip = $u;
-					break;
-				}
-			}
-		}
-		// Fallback to GitHub source zip (works, but folder name is auto-generated).
-		if ( ! $zip && ! empty( $data['zipball_url'] ) ) {
-			$zip = (string) $data['zipball_url'];
-		}
-		if ( ! $zip ) {
-			return $transient;
-		}
-
-		$update = (object) [
-			'slug'        => $this->slug,
-			'plugin'      => $this->plugin_basename,
-			'new_version' => $tag,
-			'url'         => "https://github.com/{$this->repo_user}/{$this->repo_name}/releases/latest",
-			'package'     => $zip,
-		];
-		$transient->response[ $this->plugin_basename ] = $update;
-		return $transient;
-	}
-
-	public function plugins_api( $result, $action, $args ) {
-		if ( $action !== 'plugin_information' || empty( $args->slug ) || $args->slug !== $this->slug ) {
-			return $result;
-		}
-
-		$out = new stdClass();
-		$out->name     = $this->repo_name ?: 'Signature Media Silo Structure';
-		$out->slug     = $this->slug;
-		$out->version  = $this->current_version();
-		$out->external = true;
-		$out->homepage = ( ! empty( $this->repo_user ) && ! empty( $this->repo_name ) )
-			? "https://github.com/{$this->repo_user}/{$this->repo_name}"
-			: 'https://signaturemedia.com/';
-		$out->sections = [
-			'description' => '<p>Signature Media Silo Structure.</p>',
-			'changelog'   => '<p>See latest release notes on GitHub.</p>',
-		];
-		return $out;
-	}
-}
-endif;
-
-// Initialize GitHub updater in admin only, optionally gated by license validity.
-add_action( 'plugins_loaded', function() use ( $mws_license ) {
-	// Only run in admin; skip if GitHub coordinates are not set.
-	if ( ! is_admin() || empty( SM_SILO_GH_USER ) || empty( SM_SILO_GH_REPO ) ) {
-		return;
-	}
-
-	// Optional gating: only allow updates if the license is valid.
-	if ( method_exists( $mws_license, 'is_valid' ) && ! $mws_license->is_valid() ) {
-		return;
-	}
-
-	$updater = new SignatureMedia_GH_Updater( __FILE__, SM_SILO_GH_USER, SM_SILO_GH_REPO );
-	$updater->init();
-} );
-
-if ( ! class_exists( 'SignatureMedia_GH_Updater' ) ) :
-class SignatureMedia_GH_Updater {
-	private $plugin_file, $plugin_basename, $slug, $repo_user, $repo_name;
-
-	public function __construct( string $plugin_file, string $repo_user, string $repo_name ) {
-		$this->plugin_file     = $plugin_file;
-		$this->plugin_basename = plugin_basename( $plugin_file );
-		$this->slug            = dirname( $this->plugin_basename ); // = ime foldera plugina
-		$this->repo_user       = $repo_user;
-		$this->repo_name       = $repo_name;
+		$this->allow_prerelease= $allow_prerelease;
+		$this->token           = $token;
 	}
 
 	public function init() : void {
 		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'inject_update' ] );
 		add_filter( 'plugins_api', [ $this, 'plugins_api' ], 10, 3 );
 
-		// (Opcija) auto-update samo za ovaj plugin.
 		if ( defined( 'SM_SILO_FORCE_AUTOUPDATE' ) && SM_SILO_FORCE_AUTOUPDATE ) {
 			add_filter( 'auto_update_plugin', function( $update, $item ) {
 				return ( isset( $item->plugin ) && $item->plugin === $this->plugin_basename ) ? true : $update;
@@ -323,50 +195,80 @@ class SignatureMedia_GH_Updater {
 		return isset( $data['Version'] ) ? (string) $data['Version'] : '0.0.0';
 	}
 
+	private function gh_headers() : array {
+		$h = [
+			'Accept'     => 'application/vnd.github+json',
+			'User-Agent' => 'WordPress; ' . home_url(),
+		];
+		if ( ! empty( $this->token ) ) {
+			$h['Authorization'] = 'Bearer ' . $this->token;
+		}
+		return $h;
+	}
+
+	private function fetch_release( string $current ) {
+		$cache_key = 'sm_gh_upd_' . md5( $this->repo_user . '/' . $this->repo_name . '|' . $current . '|' . ( $this->allow_prerelease ? 'pr' : 'no' ) );
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) { return $cached; }
+
+		$url  = $this->allow_prerelease
+			? "https://api.github.com/repos/{$this->repo_user}/{$this->repo_name}/releases"
+			: "https://api.github.com/repos/{$this->repo_user}/{$this->repo_name}/releases/latest";
+
+		$res  = wp_remote_get( $url, [ 'timeout' => 12, 'headers' => $this->gh_headers() ] );
+		$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
+		if ( is_wp_error( $res ) || 200 !== $code ) {
+			set_transient( $cache_key, [ 'error' => is_wp_error( $res ) ? $res->get_error_message() : ( 'HTTP ' . $code ) ], 15 * MINUTE_IN_SECONDS );
+			return [ 'error' => 'github_fetch_failed' ];
+		}
+
+		$data = json_decode( wp_remote_retrieve_body( $res ), true );
+
+		if ( $this->allow_prerelease ) {
+			// Choose the highest non-draft tag (allowing pre-release if constant enabled)
+			$rels = is_array( $data ) ? array_values( array_filter( $data, function( $r ) {
+				return empty( $r['draft'] );
+			} ) ) : [];
+			usort( $rels, function( $a, $b ) {
+				return version_compare( ltrim( $b['tag_name'] ?? '', 'v' ), ltrim( $a['tag_name'] ?? '', 'v' ) );
+			} );
+			$release = $rels[0] ?? null;
+		} else {
+			$release = $data; // /latest returns a single object
+		}
+
+		set_transient( $cache_key, $release, 30 * MINUTE_IN_SECONDS );
+		return $release;
+	}
+
 	public function inject_update( $transient ) {
 		if ( empty( $transient ) || ! is_object( $transient ) ) return $transient;
 		if ( empty( $this->repo_user ) || empty( $this->repo_name ) ) return $transient;
 
-		$current   = $this->current_version();
-		$cache_key = 'sm_gh_upd_' . md5( $this->repo_user . '/' . $this->repo_name . '|' . $current );
-		$resp      = get_transient( $cache_key );
+		$current = $this->current_version();
+		$rel     = $this->fetch_release( $current );
+		if ( ! is_array( $rel ) || isset( $rel['error'] ) ) return $transient;
 
-		if ( false === $resp ) {
-			$url  = "https://api.github.com/repos/{$this->repo_user}/{$this->repo_name}/releases/latest";
-			$resp = wp_remote_get( $url, [
-				'timeout' => 12,
-				'headers' => [
-					'Accept'     => 'application/vnd.github+json',
-					'User-Agent' => 'WordPress; ' . home_url(),
-				],
-			] );
-			set_transient( $cache_key, $resp, 30 * MINUTE_IN_SECONDS );
-		}
-
-		if ( is_wp_error( $resp ) ) return $transient;
-		if ( (int) wp_remote_retrieve_response_code( $resp ) !== 200 ) return $transient;
-
-		$data = json_decode( wp_remote_retrieve_body( $resp ), true );
-		$tag  = isset( $data['tag_name'] ) ? ltrim( (string) $data['tag_name'], 'v' ) : null;
+		$tag = isset( $rel['tag_name'] ) ? ltrim( (string) $rel['tag_name'], 'v' ) : null;
 		if ( ! $tag || ! version_compare( $tag, $current, '>' ) ) return $transient;
 
-		// Traži asset .zip (preporučeno)
 		$zip = '';
-		if ( ! empty( $data['assets'] ) ) {
-			foreach ( $data['assets'] as $a ) {
-				$u = $a['browser_download_url'] ?? '';
+		if ( ! empty( $rel['assets'] ) && is_array( $rel['assets'] ) ) {
+			foreach ( $rel['assets'] as $a ) {
+				$u = isset( $a['browser_download_url'] ) ? (string) $a['browser_download_url'] : '';
 				if ( $u && preg_match( '/\.zip$/i', $u ) ) { $zip = $u; break; }
 			}
 		}
-		// Fallback: GitHub source zip (radi, ali folder ime je generičko)
-		if ( ! $zip && ! empty( $data['zipball_url'] ) ) $zip = (string) $data['zipball_url'];
+		if ( ! $zip && ! empty( $rel['zipball_url'] ) ) {
+			$zip = (string) $rel['zipball_url']; // fallback (folder name will be auto-generated)
+		}
 		if ( ! $zip ) return $transient;
 
 		$transient->response[ $this->plugin_basename ] = (object) [
 			'slug'        => $this->slug,
 			'plugin'      => $this->plugin_basename,
 			'new_version' => $tag,
-			'url'         => "https://github.com/{$this->repo_user}/{$this->repo_name}/releases/latest",
+			'url'         => "https://github.com/{$this->repo_user}/{$this->repo_name}/releases",
 			'package'     => $zip,
 		];
 		return $transient;
@@ -389,3 +291,14 @@ class SignatureMedia_GH_Updater {
 	}
 }
 endif;
+
+// Initialize updater once (admin only), gated by license validity
+add_action( 'plugins_loaded', function() use ( $mws_license ) {
+	if ( ! is_admin() || empty( SM_SILO_GH_USER ) || empty( SM_SILO_GH_REPO ) ) return;
+	if ( method_exists( $mws_license, 'is_valid' ) && ! $mws_license->is_valid() ) return;
+
+	$token  = defined( 'SM_SILO_GH_TOKEN' ) ? SM_SILO_GH_TOKEN : '';
+	$allow  = defined( 'SM_SILO_ALLOW_PRERELEASE' ) ? (bool) SM_SILO_ALLOW_PRERELEASE : false;
+
+	( new SignatureMedia_GH_Updater( __FILE__, SM_SILO_GH_USER, SM_SILO_GH_REPO, $allow, $token ) )->init();
+} );
