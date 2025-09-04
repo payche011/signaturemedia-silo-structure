@@ -27,9 +27,9 @@ define( 'SIGNATUREMEDIA_SILO_BASENAME', plugin_basename( __FILE__ ) );    // Plu
  * - Make a release on GitHub with a ZIP asset whose top-level folder matches this plugin folder.
  * - Example ZIP structure: signaturemedia-silo-structure/ (this file + includes/)
  */
-// Setuj GitHub repo – OBAVEZNO promeni.
-if ( ! defined( 'SM_SILO_GH_USER' ) ) define( 'SM_SILO_GH_USER', 'TVOJ_GITHUB_USER' );
-if ( ! defined( 'SM_SILO_GH_REPO' ) ) define( 'SM_SILO_GH_REPO', 'TVOJ_REPO' );
+
+define( 'SM_SILO_GH_USER', 'payche011' );
+define( 'SM_SILO_GH_REPO', 'signaturemedia-silo-structure' );
 /**
  * =========================================================
  * Includes
