@@ -2,16 +2,13 @@
 /*
 Plugin Name: Signature Media Silo Structure
 Description: Enhanced silo content structure with toggleable features and additional content types.
-Version: 2.0.5
+Version: 2.0.4
 Author: signaturemedia
 Author URI: https://signaturemedia.com/
 Text Domain: signaturemedia-silo-structure
 */
 
-// Security: Prevent direct file access.
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
+if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 /**
  * =========================================================
@@ -23,51 +20,106 @@ define( 'SIGNATUREMEDIA_SILO_URL', plugin_dir_url( __FILE__ ) );          // URL
 define( 'SIGNATUREMEDIA_SILO_BASENAME', plugin_basename( __FILE__ ) );    // Plugin basename (for hooks, etc.).
 
 /**
- * GitHub updater settings — set these to enable auto-updates from GitHub Releases.
- * - Make a release on GitHub with a ZIP asset whose top-level folder matches this plugin folder.
- * - Example ZIP structure: signaturemedia-silo-structure/ (this file + includes/)
+ * GitHub updater settings (override in wp-config.php if you want):
+ *
+ * define('SM_SILO_GH_USER', 'your-user');
+ * define('SM_SILO_GH_REPO', 'your-repo');
+ * define('SM_SILO_GH_BRANCH', 'main');             // or 'master'
+ * define('SM_SILO_GH_TOKEN', 'ghp_xxx');           // optional, for private or to avoid rate limits
  */
+if ( ! defined( 'SM_SILO_GH_USER' ) )   define( 'SM_SILO_GH_USER',   'payche011' );
+if ( ! defined( 'SM_SILO_GH_REPO' ) )   define( 'SM_SILO_GH_REPO',   'signaturemedia-silo-structure' );
+if ( ! defined( 'SM_SILO_GH_BRANCH' ) ) define( 'SM_SILO_GH_BRANCH', 'main' );
 
-define( 'SM_SILO_GH_USER', 'payche011' );
-define( 'SM_SILO_GH_REPO', 'signaturemedia-silo-structure' );
 /**
  * =========================================================
  * Includes
  * =========================================================
  */
-// Core structure classes
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-post-types.php';      // Registers CPTs
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-taxonomies.php';      // Registers custom taxonomies (service_category)
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-rewrite.php';         // Handles custom rewrite rules and URL structure
-require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-admin.php';           // Admin menu pages and backend UI
+require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-admin.php';           // Admin pages and backend UI
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-query.php';           // Adjusts WP_Query behavior for silo archives
-// Silo Archive CPT (shadow editor za Rank Math + ACF)
-require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-silo-archive-cpt.php';
-// ACF integration (contains SignatureMedia_Silo_ACF_Location_Rule and SignatureMedia_Silo_Admin_ACF_Links)
-require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-acf-integration.php';
+require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-silo-archive-cpt.php';// Shadow CPT for archive editor
+require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-acf-integration.php'; // ACF integration (location rule + admin links)
 
-// Licensing client (server-based updates supported; we also add GitHub updater below)
+// Licensing client
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-mws-license-client.php';
-
 $mws_license = new MWS_License_Client( [
-	'product'       => 'signaturemedia-silo-structure', // = Product Slug na serveru
+	'product'       => 'signaturemedia-silo-structure', // must match product_slug on your license server
 	'api_base'      => 'https://licenses.signaturemedia.com/wp-json/mws/v1',
 	'option_prefix' => 'signaturemedia-silo-structure',
 	'plugin_file'   => __FILE__,
+	// 'updates'    => 'server', // <— enable if you later want updates from your license server instead of GitHub
 ] );
 $mws_license->init();
 
-
+/**
+ * =========================================================
+ * GitHub auto-updates (Plugin Update Checker)
+ * - Uses GitHub Releases; supports release assets; optional token.
+ * - Runs in wp-admin only; gated by valid license.
+ * =========================================================
+ */
 add_action( 'plugins_loaded', function() use ( $mws_license ) {
-	if ( ! is_admin() || empty( SM_SILO_GH_USER ) || empty( SM_SILO_GH_REPO ) ) return;
+	if ( ! is_admin() ) {
+		return;
+	}
 
-	// (Opcija) Gati update dok licenca nije validna – ukloni if želiš update bez licence.
-	if ( method_exists( $mws_license, 'is_valid' ) && ! $mws_license->is_valid() ) return;
+	// Gate by license (optional): comment the next 3 lines if you want updates even when license is invalid.
+	if ( method_exists( $mws_license, 'is_valid' ) && ! $mws_license->is_valid() ) {
+		return;
+	}
 
-	$up = new SignatureMedia_GH_Updater( __FILE__, SM_SILO_GH_USER, SM_SILO_GH_REPO );
-	$up->init();
-} );
+	$lib = SIGNATUREMEDIA_SILO_PATH . 'lib/plugin-update-checker/plugin-update-checker.php';
+	if ( ! file_exists( $lib ) ) {
+		add_action( 'admin_notices', function () {
+			echo '<div class="notice notice-warning"><p>'
+				. esc_html__( 'Signature Media Silo Structure: Plugin Update Checker library is missing. Put it in lib/plugin-update-checker/.', 'signaturemedia-silo-structure' )
+				. '</p></div>';
+		} );
+		return;
+	}
+	require_once $lib;
 
+	$repo_url = sprintf( 'https://github.com/%s/%s/', SM_SILO_GH_USER, SM_SILO_GH_REPO );
+
+	// Build update checker (v5 preferred; fallback to v4 if needed)
+	if ( class_exists( 'Puc_v5_Factory' ) ) {
+		$checker = Puc_v5_Factory::buildUpdateChecker(
+			$repo_url,
+			__FILE__,
+			'signaturemedia-silo-structure'
+		);
+	} else {
+		$checker = Puc_v4_Factory::buildUpdateChecker(
+			$repo_url,
+			__FILE__,
+			'signaturemedia-silo-structure'
+		);
+	}
+
+	// Use your default branch (main/master)
+	if ( method_exists( $checker, 'setBranch' ) ) {
+		$checker->setBranch( SM_SILO_GH_BRANCH );
+	}
+
+	// Prefer Release Assets (ZIP you attach to the release) to keep folder name correct
+	if ( method_exists( $checker, 'getVcsApi' ) ) {
+		$vcs = $checker->getVcsApi();
+		if ( $vcs && method_exists( $vcs, 'enableReleaseAssets' ) ) {
+			$vcs->enableReleaseAssets();
+		}
+	}
+
+	// Optional: auth for private repos or to avoid rate-limits
+	if ( defined( 'SM_SILO_GH_TOKEN' ) && SM_SILO_GH_TOKEN ) {
+		if ( method_exists( $checker, 'setAuthentication' ) ) {
+			$checker->setAuthentication( SM_SILO_GH_TOKEN );
+		}
+	}
+}, 20 );
 
 /**
  * =========================================================
@@ -83,19 +135,18 @@ class SignatureMedia_Silo_Structure {
 		new SignatureMedia_Silo_Rewrite();    // Add custom rewrite rules
 		new SignatureMedia_Silo_Query();      // Adjust queries for silo archives
 
-		// >>> DODAJ OVO: pokreni shadow CPT <<<
+		// Shadow CPT bootstrap (if function exists in included file)
 		if ( function_exists( '\\SignatureMedia\\SiloArchive\\bootstrap' ) ) {
 			\SignatureMedia\SiloArchive\bootstrap();
 		}
 
 		// Admin-only features
 		if ( is_admin() ) {
-			// Admin menu & pages
 			if ( class_exists( 'SignatureMedia_Silo_Admin' ) ) {
 				new SignatureMedia_Silo_Admin();
 			}
 
-			// Defensive: make sure ACF integration file is loaded (in case path changed)
+			// Defensive include in case paths change
 			if ( ! class_exists( 'SignatureMedia_Silo_Admin_ACF_Links' ) || ! class_exists( 'SignatureMedia_Silo_ACF_Location_Rule' ) ) {
 				$acf_integration = SIGNATUREMEDIA_SILO_PATH . 'includes/class-acf-integration.php';
 				if ( file_exists( $acf_integration ) ) {
@@ -103,7 +154,7 @@ class SignatureMedia_Silo_Structure {
 				}
 			}
 
-			// Instantiate optional ACF admin helpers only if available
+			// Instantiate optional ACF helpers only if available
 			if ( class_exists( 'SignatureMedia_Silo_Admin_ACF_Links' ) && ( function_exists( 'acf' ) || class_exists( 'ACF' ) ) ) {
 				new SignatureMedia_Silo_Admin_ACF_Links();
 			}
@@ -120,7 +171,7 @@ class SignatureMedia_Silo_Structure {
 	 * - Flushes rewrite rules so pretty permalinks work immediately
 	 * - Sets a default posts_per_page value to match template expectations
 	 */
-	public static function activate() {
+	public static function activate() : void {
 		if ( class_exists( 'SignatureMedia_Silo_Post_Types' ) ) {
 			( new SignatureMedia_Silo_Post_Types() )->register();
 		}
@@ -139,7 +190,7 @@ class SignatureMedia_Silo_Structure {
 	 * Runs on plugin deactivation
 	 * - Flushes rewrite rules to clean up
 	 */
-	public static function deactivate() {
+	public static function deactivate() : void {
 		flush_rewrite_rules();
 	}
 }
@@ -153,152 +204,3 @@ new SignatureMedia_Silo_Structure();
 
 register_activation_hook( __FILE__, [ 'SignatureMedia_Silo_Structure', 'activate' ] );
 register_deactivation_hook( __FILE__, [ 'SignatureMedia_Silo_Structure', 'deactivate' ] );
-
-/**
- * =========================================================
- * Lightweight GitHub Releases Updater (public repo)
- * - Single-file, cached, works alongside your license client.
- * - Only runs in wp-admin; optionally gated by license validity.
- * - Supports optional GitHub token (to avoid 403 rate-limits) and pre-releases.
- *   define('SM_SILO_GH_TOKEN', 'ghp_xxx');            // optional
- *   define('SM_SILO_ALLOW_PRERELEASE', true);         // optional
- *   define('SM_SILO_FORCE_AUTOUPDATE', true);         // optional
- * =========================================================
- */
-if ( ! class_exists( 'SignatureMedia_GH_Updater' ) ) :
-class SignatureMedia_GH_Updater {
-	private $plugin_file, $plugin_basename, $slug, $repo_user, $repo_name, $allow_prerelease, $token;
-
-	public function __construct( string $plugin_file, string $repo_user, string $repo_name, bool $allow_prerelease = false, string $token = '' ) {
-		$this->plugin_file     = $plugin_file;
-		$this->plugin_basename = plugin_basename( $plugin_file );
-		$this->slug            = dirname( $this->plugin_basename );
-		$this->repo_user       = $repo_user;
-		$this->repo_name       = $repo_name;
-		$this->allow_prerelease= $allow_prerelease;
-		$this->token           = $token;
-	}
-
-	public function init() : void {
-		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'inject_update' ] );
-		add_filter( 'plugins_api', [ $this, 'plugins_api' ], 10, 3 );
-
-		if ( defined( 'SM_SILO_FORCE_AUTOUPDATE' ) && SM_SILO_FORCE_AUTOUPDATE ) {
-			add_filter( 'auto_update_plugin', function( $update, $item ) {
-				return ( isset( $item->plugin ) && $item->plugin === $this->plugin_basename ) ? true : $update;
-			}, 10, 2 );
-		}
-	}
-
-	private function current_version() : string {
-		$data = get_file_data( $this->plugin_file, [ 'Version' => 'Version' ] );
-		return isset( $data['Version'] ) ? (string) $data['Version'] : '0.0.0';
-	}
-
-	private function gh_headers() : array {
-		$h = [
-			'Accept'     => 'application/vnd.github+json',
-			'User-Agent' => 'WordPress; ' . home_url(),
-		];
-		if ( ! empty( $this->token ) ) {
-			$h['Authorization'] = 'Bearer ' . $this->token;
-		}
-		return $h;
-	}
-
-	private function fetch_release( string $current ) {
-		$cache_key = 'sm_gh_upd_' . md5( $this->repo_user . '/' . $this->repo_name . '|' . $current . '|' . ( $this->allow_prerelease ? 'pr' : 'no' ) );
-		$cached    = get_transient( $cache_key );
-		if ( false !== $cached ) { return $cached; }
-
-		$url  = $this->allow_prerelease
-			? "https://api.github.com/repos/{$this->repo_user}/{$this->repo_name}/releases"
-			: "https://api.github.com/repos/{$this->repo_user}/{$this->repo_name}/releases/latest";
-
-		$res  = wp_remote_get( $url, [ 'timeout' => 12, 'headers' => $this->gh_headers() ] );
-		$code = is_wp_error( $res ) ? 0 : (int) wp_remote_retrieve_response_code( $res );
-		if ( is_wp_error( $res ) || 200 !== $code ) {
-			set_transient( $cache_key, [ 'error' => is_wp_error( $res ) ? $res->get_error_message() : ( 'HTTP ' . $code ) ], 15 * MINUTE_IN_SECONDS );
-			return [ 'error' => 'github_fetch_failed' ];
-		}
-
-		$data = json_decode( wp_remote_retrieve_body( $res ), true );
-
-		if ( $this->allow_prerelease ) {
-			// Choose the highest non-draft tag (allowing pre-release if constant enabled)
-			$rels = is_array( $data ) ? array_values( array_filter( $data, function( $r ) {
-				return empty( $r['draft'] );
-			} ) ) : [];
-			usort( $rels, function( $a, $b ) {
-				return version_compare( ltrim( $b['tag_name'] ?? '', 'v' ), ltrim( $a['tag_name'] ?? '', 'v' ) );
-			} );
-			$release = $rels[0] ?? null;
-		} else {
-			$release = $data; // /latest returns a single object
-		}
-
-		set_transient( $cache_key, $release, 30 * MINUTE_IN_SECONDS );
-		return $release;
-	}
-
-	public function inject_update( $transient ) {
-		if ( empty( $transient ) || ! is_object( $transient ) ) return $transient;
-		if ( empty( $this->repo_user ) || empty( $this->repo_name ) ) return $transient;
-
-		$current = $this->current_version();
-		$rel     = $this->fetch_release( $current );
-		if ( ! is_array( $rel ) || isset( $rel['error'] ) ) return $transient;
-
-		$tag = isset( $rel['tag_name'] ) ? ltrim( (string) $rel['tag_name'], 'v' ) : null;
-		if ( ! $tag || ! version_compare( $tag, $current, '>' ) ) return $transient;
-
-		$zip = '';
-		if ( ! empty( $rel['assets'] ) && is_array( $rel['assets'] ) ) {
-			foreach ( $rel['assets'] as $a ) {
-				$u = isset( $a['browser_download_url'] ) ? (string) $a['browser_download_url'] : '';
-				if ( $u && preg_match( '/\.zip$/i', $u ) ) { $zip = $u; break; }
-			}
-		}
-		if ( ! $zip && ! empty( $rel['zipball_url'] ) ) {
-			$zip = (string) $rel['zipball_url']; // fallback (folder name will be auto-generated)
-		}
-		if ( ! $zip ) return $transient;
-
-		$transient->response[ $this->plugin_basename ] = (object) [
-			'slug'        => $this->slug,
-			'plugin'      => $this->plugin_basename,
-			'new_version' => $tag,
-			'url'         => "https://github.com/{$this->repo_user}/{$this->repo_name}/releases",
-			'package'     => $zip,
-		];
-		return $transient;
-	}
-
-	public function plugins_api( $result, $action, $args ) {
-		if ( $action !== 'plugin_information' || empty( $args->slug ) || $args->slug !== $this->slug ) return $result;
-
-		$out = new stdClass();
-		$out->name     = $this->repo_name ?: 'Signature Media Silo Structure';
-		$out->slug     = $this->slug;
-		$out->version  = $this->current_version();
-		$out->external = true;
-		$out->homepage = ( $this->repo_user && $this->repo_name ) ? "https://github.com/{$this->repo_user}/{$this->repo_name}" : home_url();
-		$out->sections = [
-			'description' => '<p>Signature Media Silo Structure.</p>',
-			'changelog'   => '<p>See latest release notes on GitHub.</p>',
-		];
-		return $out;
-	}
-}
-endif;
-
-// Initialize updater once (admin only), gated by license validity
-add_action( 'plugins_loaded', function() use ( $mws_license ) {
-	if ( ! is_admin() || empty( SM_SILO_GH_USER ) || empty( SM_SILO_GH_REPO ) ) return;
-	if ( method_exists( $mws_license, 'is_valid' ) && ! $mws_license->is_valid() ) return;
-
-	$token  = defined( 'SM_SILO_GH_TOKEN' ) ? SM_SILO_GH_TOKEN : '';
-	$allow  = defined( 'SM_SILO_ALLOW_PRERELEASE' ) ? (bool) SM_SILO_ALLOW_PRERELEASE : false;
-
-	( new SignatureMedia_GH_Updater( __FILE__, SM_SILO_GH_USER, SM_SILO_GH_REPO, $allow, $token ) )->init();
-} );
