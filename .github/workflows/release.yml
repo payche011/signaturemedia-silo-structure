@@ -1,0 +1,31 @@
+name: Build & Release ZIP
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'   # npr v2.0.3
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Proveri da folder plugina postoji tačno ovako
+      - name: Ensure plugin folder exists
+        run: test -d signaturemedia-silo-structure
+
+      - name: Create ZIP
+        run: |
+          zip -r signaturemedia-silo-structure-${GITHUB_REF_NAME}.zip signaturemedia-silo-structure \
+            -x "*/.git/*" "*/.github/*" "*/node_modules/*" "*/.DS_Store"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: signaturemedia-silo-structure-${{ github.ref_name }}.zip
