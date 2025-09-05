@@ -16,7 +16,7 @@ define( 'SIGNATUREMEDIA_SILO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'SIGNATUREMEDIA_SILO_URL',  plugin_dir_url( __FILE__ ) );
 define( 'SIGNATUREMEDIA_SILO_BASENAME', plugin_basename( __FILE__ ) );
 
-/** Core includes (ostavi kako već imaš) */
+/** Core includes */
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-post-types.php';
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-taxonomies.php';
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-rewrite.php';
@@ -25,18 +25,18 @@ require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-query.php';
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-silo-archive-cpt.php';
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-acf-integration.php';
 
-/** Licenca — radi samo status/aktivaciju; ne blokira update */
+/** License — only handles status/activation; does not block updates */
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-mws-license-client.php';
 $mws_license = new MWS_License_Client([
   'product'       => 'signaturemedia-silo-structure',
   'api_base'      => 'https://licenses.signaturemedia.com/wp-json/mws/v1',
   'option_prefix' => 'mws_silo',
   'plugin_file'   => __FILE__,
-  // 'updates'     => 'server', // <- ostavi isključeno; koristimo GitHub
+  // 'updates'     => 'server', // <- leave disabled; using GitHub
 ]);
 $mws_license->init();
 
-/** Glavna klasa */
+/** Main class */
 class SignatureMedia_Silo_Structure {
   public function __construct() {
     new SignatureMedia_Silo_Post_Types();
@@ -71,12 +71,12 @@ register_activation_hook( __FILE__, [ 'SignatureMedia_Silo_Structure', 'activate
 register_deactivation_hook( __FILE__, [ 'SignatureMedia_Silo_Structure', 'deactivate' ] );
 
 /**
- * === GitHub auto-updates preko Plugin Update Checker (PUC) ===
- * 1) U repou i na serveru obavezno postoji folder:
+ * === GitHub auto-updates via Plugin Update Checker (PUC) ===
+ * 1) The repository and server must have the folder:
  *    signaturemedia-silo-structure/
- * 2) U repo dodaj biblioteku u: lib/plugin-update-checker/
- * 3) Na GitHub-u objavi Release sa tagom (npr. v2.0.3) i attach-uj ZIP koji u root-u ima TAJ folder.
- * 4) (opciono) private/rate-limit: u wp-config.php dodaj define('SM_SILO_GH_TOKEN','ghp_...').
+ * 2) Add the library to the repo at: lib/plugin-update-checker/
+ * 3) On GitHub, publish a Release with a tag (e.g. v2.0.3) and attach a ZIP with THIS folder at the root.
+ * 4) (optional) For private/rate-limit: add define('SM_SILO_GH_TOKEN','ghp_...') to wp-config.php.
  */
 add_action('plugins_loaded', function () {
   if ( ! is_admin() ) return;
@@ -97,16 +97,10 @@ add_action('plugins_loaded', function () {
     'signaturemedia-silo-structure'
   );
 
-  $checker->setBranch('main');                 // promeni ako koristiš drugi default branch
-  $checker->getVcsApi()->enableReleaseAssets(); // očekujemo ZIP u Release-u (top-level folder = plugin folder)
+  $checker->setBranch('main');                 // change if using a different default branch
+  $checker->getVcsApi()->enableReleaseAssets(); // expects ZIP in Release (top-level folder = plugin folder)
 
   if ( defined('SM_SILO_GH_TOKEN') && SM_SILO_GH_TOKEN ) {
     $checker->setAuthentication( SM_SILO_GH_TOKEN );
-  }
-
-  // Mini dijagnostika: ?sm-puc=1 ispisuje meta u log (debug.log)
-  if ( isset($_GET['sm-puc']) && current_user_can('manage_options') ) {
-    $update = $checker->checkForUpdates();
-    error_log('[SM-PUC] local=' . get_file_data(__FILE__, ['Version'=>'Version'])['Version'] . ' remote=' . ( $update ? $update->new_version : 'none' ) );
   }
 });
