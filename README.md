@@ -1,60 +1,154 @@
 # Signature Media Silo Structure
 
-**Signature Media Silo Structure** is a WordPress plugin that creates an SEO-friendly silo content architecture:
-custom post types, service taxonomies, query/rewrite rules, a silo archive editor (Rank Math–friendly), and ACF integrations.
+A WordPress plugin for building an SEO‑friendly **silo content architecture**: custom post types, a shared service taxonomy, smart rewrite/query rules, a Rank Math–compatible “shadow” archive editor, and ACF integrations.
 
-It’s lightweight, safe-by-default, and supports automatic updates via **GitHub Releases**.
+Lightweight, safe-by-default, and supports automatic updates via **GitHub Releases** (with optional license gating).
 
 ---
 
-## Features
+## At a Glance
 
-- Custom Post Types for siloed content
-- Custom Taxonomy (`service_category`) with clean permalinks
-- Query and rewrite rules tuned for silo archives
-- Silo Archive “shadow CPT” (works with Rank Math + ACF)
-- Admin helpers for ACF (optional)
-- License check (optional) via MWS License Server
-- **Auto-update** via GitHub Releases (optional license gating)
+- **CPTs**: `silo_service` (Sub Services), `silo_problem` (Problem Signs), `silo_solution` (Solutions), and `locations` (Locations Served).
+- **Taxonomy**: `service_category` (hierarchical) shared by Services/Problems/Solutions.
+- **Archives**: Per‑service archives for **Problem Signs** and **Solutions** with clean permalinks.
+- **Shadow “Silo Archive” CPT**: `silo_archive` stores Rank Math SEO and ACF field content for each per‑service archive.
+- **Admin UI**: Silo Settings (permalink style), Service Silos tools, and “Problem/Solutions ACF Fields” admin pages.
+- **Permalinks**: Optional removal of the `/services/` prefix site‑wide, with automatic 301s in both directions.
+- **Queries**: Main queries for service tax archives are scoped correctly and default to **9** items per page.
+- **Updates**: GitHub Releases via Plugin Update Checker; optional license activation page (MWS).
 
 ---
 
 ## Requirements
 
-- WordPress 5.8+
-- PHP 7.4+ (8.0+ recommended)
-- (Optional) Rank Math / ACF installed
+- WordPress **5.8+**
+- PHP **7.4+** (8.0+ recommended)
+- Optional: Rank Math, Advanced Custom Fields (ACF)
 
 ---
 
 ## Installation
 
-1. Download the latest release ZIP from the **Releases** page.
-2. In **WordPress → Plugins → Add New → Upload Plugin**, upload the ZIP and activate.
-3. The plugin will register post types and taxonomies and flush permalinks on activation.
+1) Download the latest release ZIP built with the top‑level folder **`signaturemedia-silo-structure/`**.  
+2) WordPress → Plugins → Add New → Upload Plugin → choose the ZIP and **Activate**.  
+3) On activation the plugin registers CPTs/Taxonomy, flushes permalinks, and sets `posts_per_page=9` if unset.
 
-> **Note:** If you are installing from a release asset, the ZIP **must** contain a top-level folder named `signaturemedia-silo-structure/`.
-
----
-
-## Auto-Updates (GitHub Releases)
-
-Auto-updates are built in. On every release:
-
-- Bump the `Version:` header in `signaturemedia-silo-structure.php`
-- Tag the repo `vX.Y.Z`
-- Publish a GitHub Release for that tag and attach a ZIP asset where the **top-level folder is** `signaturemedia-silo-structure/`.
-
-WordPress sites with this plugin installed will detect the new version and update (you can enable forced auto-update for this plugin in code if desired).
+> **Note:** The Plugin Update Checker library must be present at `lib/plugin-update-checker/` if you want GitHub auto‑updates (see **Updates**).
 
 ---
 
-## Configuration (optional)
+## Content Model
 
-The plugin file defines these constants to enable GitHub updates:
+### Custom Post Types
+- **Sub Services**: `silo_service` – hierarchical, REST‑enabled. No built‑in archive; taxonomy pages act as archives.
+- **Problem Signs**: `silo_problem` – hierarchical, REST‑enabled. Archive output handled by custom rewrite/query.
+- **Solutions**: `silo_solution` – hierarchical, REST‑enabled. Archive output handled by custom rewrite/query.
+- **Locations Served**: `locations` – hierarchical, REST‑enabled. Public, permalink base: `/service-area/...`.
 
+### Shared Taxonomy
+- **Service Categories**: `service_category` – hierarchical taxonomy used by Services/Problems/Solutions. Shows in admin and REST. Custom rewrite is handled by the plugin logic (see below).
+
+---
+
+## URLs & Rewrite Logic
+
+The plugin installs rewrite tags and rules that produce clean, predictable URLs for your silo structure. Highlights:
+
+- **Service Category base**: By default, URLs live under `/services/{service}/...`.  
+- **Strip Base (optional)**: An admin toggle enables clean URLs like `/{service}/{post}`. When enabled, legacy `/services/...` requests 301 to the new structure; turning it off reverts gracefully (with reverse 301s).  
+- **Archive types**: Each service category automatically gets two archive endpoints:  
+  - **Problem Signs** → `/services/{service}/problem-signs/` (or `/{service}/problem-signs/` if base is stripped)  
+  - **Solutions** → `/services/{service}/solutions/` (or `/{service}/solutions/`)  
+- **Locations Served** CPT uses the slug **`service-area`**, e.g., `/service-area/{location}/`.
+
+There’s also a dev utility to manually flush rules by visiting `?flush_rules=1` as an administrator.
+
+---
+
+## Query Behavior
+
+- Frontend **main queries** for service category archives are scoped to the current term (no leaking of child terms on parent listings).  
+- **Archive paginations** are limited to the site setting; on activation the plugin ensures `posts_per_page` is **9** by default.  
+- Special handling ensures the Problem Signs/Solutions endpoints behave as true CPT archives for **`silo_problem`** and **`silo_solution`** respectively.
+
+---
+
+## Shadow “Silo Archive” CPT (Rank Math + ACF)
+
+To make SEO and content editing comfortable, the plugin registers a **shadow** CPT named `silo_archive` that acts as a container for each service archive:
+
+- Each shadow post links a **Service Category** + **Archive Type** (Problem Signs or Solutions).
+- Rank Math’s **Title/Description/Robots** can be edited on the shadow post and are applied dynamically to the matching archive.  
+- You can attach **ACF** fields to `silo_archive` and render them on the archive templates.  
+- The shadow CPT is not publicly routed (no frontend single), but it’s visible in the admin for editing and auditing.
+
+---
+
+## Admin UI
+
+- **Service Silos**: overview and handy links for working with each service’s archives.
+- **Silo Settings**: checkbox to strip `/services/` from URLs globally (with safe redirects).
+- **Problem Signs ACF Fields** and **Solutions ACF Fields** pages: pick a Service Category and edit its ACF flexible content for the respective archive. Includes **Preview** links to the live archives.
+
+---
+
+## Template Hints
+
+The plugin resolves archive templates in this order (use these in your theme as needed):
+
+- `archive-silo_problem.php` → Problem Signs archives  
+- `archive-silo_solution.php` → Solutions archives  
+- Falls back to `archive.php` then `index.php`
+
+For taxonomy listings, provide a `taxonomy-service_category.php` or use conditional logic to render sections for services/problems/solutions.
+
+---
+
+## Updates (GitHub Releases)
+
+The plugin uses **Plugin Update Checker**. To enable:
+
+1) Ensure `lib/plugin-update-checker/plugin-update-checker.php` exists inside the plugin.  
+2) Create a GitHub tag (e.g., `v2.1.0`) and a **Release** with a ZIP whose **top‑level folder name is `signaturemedia-silo-structure/`**.  
+3) Bump the `Version:` in `signaturemedia-silo-structure.php`.  
+4) (Optional) Define `SM_SILO_GH_TOKEN` in `wp-config.php` to raise GitHub API limits.  
+
+> Sites can opt into “Enable auto‑updates” from the Plugins screen; the updater will then fetch new releases automatically.
+
+### Constants (optional)
 ```php
 define( 'SM_SILO_GH_USER', 'payche011' );
 define( 'SM_SILO_GH_REPO', 'signaturemedia-silo-structure' );
-// optional: force auto-updates for this plugin
+// optional: force auto‑update logic in your own code if you want
 define( 'SM_SILO_FORCE_AUTOUPDATE', true );
+```
+
+---
+
+## Licensing (Optional)
+
+An **MWS License** page is available under **Settings → MWS License**. You can enter a license key to validate against Signature Media’s license server. Licensing does **not** block GitHub‑based updates unless you explicitly enable server‑driven updates in code.
+
+---
+
+## Changelog
+
+### 2.1
+- New **“Strip /services/ from URLs”** switch with safe 301 behavior both ways.
+- **Shadow `silo_archive`** CPT for archive‑level Rank Math SEO + ACF content.
+- Admin pages for **Problem Signs** and **Solutions** ACF management with live preview links.
+- Added **`locations`** CPT (slug: `service-area`) for service‑area landing pages.
+- Safer rewrite priority + manual flush utility.
+- Ensured default `posts_per_page` = **9** on activation.
+
+---
+
+## Uninstall / Deactivation
+
+Deactivation flushes rewrite rules. No custom tables are created by this plugin. Export taxonomy terms and posts if you plan to migrate.
+
+---
+
+## Support
+
+Signature Media • https://signaturemedia.com/

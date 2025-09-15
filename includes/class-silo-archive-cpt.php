@@ -9,11 +9,11 @@ if (!defined('ABSPATH')) exit;
 // ---- Constants ----
 const CPT               = 'silo_archive';
 const META_LINKED_TERM  = '_silo_linked_term';
-const META_ARCHIVE_TYPE = '_silo_archive_type'; // <-- UJEDNAČENO!
+const META_ARCHIVE_TYPE = '_silo_archive_type'; // <-- UNIFIED!
 const TYPE_PROBLEM      = 'problem_signs';
 const TYPE_SOLUTION     = 'solutions';
 
-// ---- 0) Registracija veoma rano ----
+// ---- 0) Register early ----
 add_action('init', __NAMESPACE__ . '\\register_cpt', 0);
 // add_action('init', __NAMESPACE__ . '\\bootstrap', 20);
 
@@ -21,12 +21,12 @@ add_action('init', __NAMESPACE__ . '\\register_cpt', 0);
 function register_cpt() {
     register_post_type(CPT, [
         'label'              => 'Silo Archives',
-        'public'             => true,          // ostaje true da Rank Math metabox radi
-        'publicly_queryable' => true,         // ⬅️ spreči single prikaz na frontu
+        'public'             => true,          // remains true so Rank Math metabox works
+        'publicly_queryable' => true,         // ⬅️ prevent single display on frontend
         'exclude_from_search'=> true,
         'has_archive'        => false,
-        'rewrite'            => false,         // bez rewrite-a za CPT
-        'query_var'          => false,         // ⬅️ skloni ?silo_archive=...
+        'rewrite'            => false,         // no rewrite for this CPT
+        'query_var'          => false,         // ⬅️ remove ?silo_archive=...
         'show_ui'            => true,
         'show_in_menu'       => 'signature-media',
         'show_in_rest'       => true,
@@ -37,17 +37,17 @@ function register_cpt() {
 }
 
 
-// Skloni "Permalink" HTML u editoru za ovaj CPT
+// Remove "Permalink" HTML in the editor for this CPT
 add_filter('get_sample_permalink_html', function($html, $post_id, $new_title, $new_slug, $post){
   return ($post->post_type === CPT) ? '' : $html;
 }, 10, 5);
 
-// Skloni slug metabox (ionako nam ne treba)
+// Remove slug metabox
 add_action('admin_menu', function(){
   remove_meta_box('slugdiv', CPT, 'normal');
 });
 
-// ---- 1) Rank Math – dozvoli metabox na ovom CPT-u ----
+// ---- 1) Rank Math – allow metabox on this CPT ----
 add_filter('rank_math/metabox/post_types', __NAMESPACE__.'\\allow_rank_math_on_cpt');
 function allow_rank_math_on_cpt($types){
     $types[] = CPT; // 'silo_archive'
@@ -57,23 +57,23 @@ function allow_rank_math_on_cpt($types){
 // ---- 2) Safe bootstrap (hooks) ----
 function bootstrap() {
 
-    // Metabox za linkovanje (term + tip)
+    // Metabox for linking (term + type)
     add_action('add_meta_boxes', __NAMESPACE__ . '\\add_silo_link_metabox');
     add_action('save_post_' . CPT, __NAMESPACE__ . '\\save_silo_link');
 
-    // Admin kolone
+    // Admin columns
     add_filter('manage_edit-' . CPT . '_columns', __NAMESPACE__ . '\\columns');
     add_action('manage_' . CPT . '_posts_custom_column', __NAMESPACE__ . '\\column_content', 10, 2);
 
-    // “View Frontend” umesto default View
+    // "View Frontend" instead of default View
     add_filter('post_row_actions', __NAMESPACE__ . '\\row_actions', 10, 2);
 
-    // Rank Math frontend override (SEO sa shadow posta)
+    // Rank Math frontend override (SEO from shadow post)
     add_filter('rank_math/frontend/title',       __NAMESPACE__ . '\\maybe_override_title', 20);
     add_filter('rank_math/frontend/description', __NAMESPACE__ . '\\maybe_override_description', 20);
     add_filter('rank_math/frontend/robots',      __NAMESPACE__ . '\\maybe_override_robots', 20);
 
-    // (Ako u ACF FG ima polje 'archive_type', sinhronizuj sa meta ključem koji koristimo)
+    // (If the 'archive_type' field exists in ACF FG, sync it with our meta key)
     add_filter('acf/update_value/name=archive_type', function($value, $post_id){
         update_post_meta($post_id, META_ARCHIVE_TYPE, $value);
         return $value;
@@ -153,9 +153,9 @@ function row_actions($actions, $post){
     return $actions;
 }
 
-// ---- Rank Math frontend overrides (SEO sa shadow posta) ----
+// ---- Rank Math frontend overrides (SEO from shadow post) ----
 function detect_archive_context(): array {
-    // tip dolazi iz rewrite-a (problem_archive/solution_archive)
+    // type comes from rewrite (problem_archive/solution_archive)
     $slug = get_query_var('service_category');
     if (!$slug) return [0, ''];
 

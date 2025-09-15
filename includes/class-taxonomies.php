@@ -8,6 +8,7 @@ class SignatureMedia_Silo_Taxonomies {
   }
 
   public function register() {
+    // Register the service_category taxonomy
     register_taxonomy( 'service_category', [ 'silo_service', 'silo_problem', 'silo_solution' ], [
       'hierarchical' => true,
       'show_in_rest' => true,

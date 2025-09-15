@@ -6,11 +6,11 @@
  *
  * require_once __DIR__ . '/includes/class-mws-license-client.php';
  * $mws_license = new MWS_License_Client([
- *   'product'       => 'signaturemedia-silo-structure', // must match product_slug on the license server
- *   'api_base'      => 'https://licenses.signaturemedia.com/wp-json/mws/v1',
- *   'option_prefix' => 'mws_silo',       // unique option prefix for this plugin
- *   'plugin_file'   => __FILE__,         // absolute path to the main plugin file
- *   // 'updates'     => 'server',        // OPTIONAL: enable server-driven updates; default 'none' (we use GitHub)
+ * 'product'       => 'signaturemedia-silo-structure', // must match product_slug on the license server
+ * 'api_base'      => 'https://licenses.signaturemedia.com/wp-json/mws/v1',
+ * 'option_prefix' => 'mws_silo',       // unique option prefix for this plugin
+ * 'plugin_file'   => __FILE__,         // absolute path to the main plugin file
+ * // 'updates'     => 'server',        // OPTIONAL: enable server-driven updates; default 'none' (we use GitHub)
  * ]);
  * $mws_license->init();
  */

@@ -57,7 +57,7 @@ public function handle_settings_save() {
         $strip = isset($_POST['strip_services_prefix']) ? '1' : '0';
         update_option('signaturemedia_strip_services_prefix', $strip === '1' ? '1' : '0');
 
-        // tražimo flush rewrite pravila na sledećem page loadu (perf-friendly)
+        // request flush of rewrite rules on the next page load (perf-friendly)
         update_option('silo_rewrite_flush_needed', true);
 
         add_action('admin_notices', function() {

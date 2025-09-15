@@ -14,9 +14,9 @@ class SignatureMedia_Silo_Rewrite {
         
         // Add our custom rewrite rules (runs after taxonomies are registered)
         add_action( 'init', [ $this, 'add_rewrite_rules' ], 11 );
-
         
-        add_action( 'init', [ $this, 'force_rule_priority' ], 999 );
+        // Force rewrite rule priority only when needed
+        add_action( 'wp_loaded', [ $this, 'maybe_force_rule_priority' ] );
         
         // Customize how permalinks are generated for our custom post types
         add_filter( 'post_type_link', [ $this, 'custom_post_type_permalinks' ], 10, 2 );
@@ -47,56 +47,60 @@ class SignatureMedia_Silo_Rewrite {
         
         // Redirect old /service_category/ URLs to new /services/ URLs
         add_action( 'template_redirect', [ $this, 'redirect_old_urls' ] );
-
     }
 
-    public function force_rule_priority() {
-
-    $rules = get_option('rewrite_rules');
-    if (!$rules) return;
-
-    $our_rules = [];
-    $other_rules = [];
-
-    $prefix = '^' . $this->base_path(); // npr '^services/' ili '^'
-
-    foreach ($rules as $pattern => $replacement) {
-        if ($prefix !== '^' && strpos($pattern, $prefix) === 0) {
-            $our_rules[$pattern] = $replacement;
-        } elseif ($prefix === '^' && preg_match('#^\^([a-z0-9\-]+)/#i', $pattern)) {
-            // bez prefiksa: naša pravila počinju sa ^{slug}/ ... (filtriraćemo kasnije kroz add_rewrite_rules)
-            $our_rules[$pattern] = $replacement;
-        } else {
-            $other_rules[$pattern] = $replacement;
+    public function maybe_force_rule_priority() {
+        if ( get_option( 'silo_rewrite_flush_needed' ) ) {
+            $this->force_rule_priority();
         }
     }
 
-    $new_rules = array_merge($our_rules, $other_rules);
-    update_option('rewrite_rules', $new_rules);
-}
+    private function force_rule_priority() {
+        $rules = get_option('rewrite_rules');
+        if (!$rules) return;
+
+        $our_rules = [];
+        $other_rules = [];
+
+        $prefix = '^' . $this->base_path(); // e.g., '^services/' or '^'
+
+        foreach ($rules as $pattern => $replacement) {
+            if ($prefix !== '^' && strpos($pattern, $prefix) === 0) {
+                $our_rules[$pattern] = $replacement;
+            } elseif ($prefix === '^' && preg_match('#^\^([a-z0-9\-]+)/#i', $pattern)) {
+                // Without prefix: our rules start with ^ {slug}/...
+                $our_rules[$pattern] = $replacement;
+            } else {
+                $other_rules[$pattern] = $replacement;
+            }
+        }
+
+        $new_rules = array_merge($our_rules, $other_rules);
+        update_option('rewrite_rules', $new_rules);
+    }
 
 
    private function strip_prefix_enabled(): bool {
     return get_option('signaturemedia_strip_services_prefix', '0') === '1';
-}
+   }
 
-/**
- * Vrati bazni deo putanje za rewrite pattern i URL gradnju.
- * Primer: 'services/' ili '' (bez prefiksa). Bez leading slash – koristimo dosledno.
- */
-private function base_path(): string {
-    return $this->strip_prefix_enabled() ? '' : 'services/';
-}
+    /**
+     * Get the base path for rewrite patterns and URL building.
+     * Example: 'services/' or '' (without a prefix). Consistent, without a leading slash.
+     */
+    private function base_path(): string {
+        return $this->strip_prefix_enabled() ? '' : 'services/';
+    }
 
-/** 
- * Prepends base_path to a relative path and ensures leading slash for full URLs.
- * E.g. build_url('foundation/solutions/') -> '/services/foundation/solutions/' ili '/foundation/solutions/'
- */
-private function build_url(string $relative): string {
-    $base = $this->base_path();
-    $path = ($base !== '' ? $base : '') . ltrim($relative, '/');
-    return '/' . ltrim($path, '/');
-}
+    /**
+     * Prepends base_path to a relative path and ensures a leading slash for full URLs.
+     * E.g. build_url('foundation/solutions/') -> '/services/foundation/solutions/' or '/foundation/solutions/'
+     */
+    private function build_url(string $relative): string {
+        $base = $this->base_path();
+        $path = ($base !== '' ? $base : '') . ltrim($relative, '/');
+        return '/' . ltrim($path, '/');
+    }
 
 
     /**
@@ -109,7 +113,6 @@ private function build_url(string $relative): string {
         add_rewrite_tag( '%solution_archive%', '([01])', 'solution_archive=' );
         add_rewrite_tag( '%silo_category%', '([^/]+)', 'silo_category=' );
         add_rewrite_tag( '%post_identifier%', '([^/]+)', 'post_identifier=' );
-        // REMOVED: services_archive tag since we're using a Page now
     }
     
 
@@ -123,7 +126,6 @@ private function build_url(string $relative): string {
         $vars[] = 'silo_solution';
         $vars[] = 'silo_category';
         $vars[] = 'post_identifier';
-        // REMOVED: services_archive since we're using a Page now
         return $vars;
     }
 
@@ -260,7 +262,7 @@ private function build_url(string $relative): string {
         }
     }
 
-    $base = $this->base_path(); // 'services/' ili ''
+    $base = $this->base_path(); // 'services/' or ''
 
     foreach ( $category_slugs as $slug ) {
 
@@ -292,14 +294,14 @@ private function build_url(string $relative): string {
             'top'
         );
 
-        // 5) Sub-services i blog postovi
+        // 5) Sub-services and blog posts
         add_rewrite_rule(
             '^' . $base . $slug . '/([^/]+)/?$',
             'index.php?silo_category=' . $slug . '&post_identifier=$matches[1]',
             'top'
         );
 
-        // 6) Service category „archive” (termin)
+        // 6) Service category "archive" (term)
         add_rewrite_rule(
             '^' . $base . $slug . '/?$',
             'index.php?service_category=' . $slug,
@@ -480,7 +482,7 @@ public function custom_blog_post_permalinks( $post_link, $post ) {
      */
     function custom_taxonomy_permalinks( $termlink, $term, $taxonomy ) {
         if ( 'service_category' === $taxonomy ) {
-            // koristi helper koji poštuje "strip /services/" opciju
+            // uses helper that respects the "strip /services/" option
             $url = $this->build_url( "{$term->slug}" );
             return home_url( user_trailingslashit( ltrim( $url, '/' ) ) );
         }
@@ -495,7 +497,7 @@ public function custom_blog_post_permalinks( $post_link, $post ) {
     $request_uri = $_SERVER['REQUEST_URI'] ?? '/';
     $strip = $this->strip_prefix_enabled();
 
-    // Legacy: /service_category/ -> /services/ (ostaje radi kompatibilnosti)
+    // Legacy: /service_category/ -> /services/ (remains for compatibility)
     if ( strpos( $request_uri, '/service_category/' ) === 0 ) {
         $target_base = $this->strip_prefix_enabled() ? '/' : '/services/';
         $new_url = preg_replace( '#^/service_category/#', $target_base, $request_uri );
@@ -504,17 +506,17 @@ public function custom_blog_post_permalinks( $post_link, $post ) {
     }
 
 
-    // Kada je strip uključen: /services/... -> bez prefiksa
+    // When strip is enabled: /services/... -> without prefix
     if ( $strip && preg_match('#^/services/(.+)$#', $request_uri, $m) ) {
         $new_url = '/' . ltrim($m[1], '/');
         wp_redirect( home_url( $new_url ), 301 );
         exit;
     }
 
-    // Kada je strip isključen: „goli” pattern -> dodaj /services/
+    // When strip is disabled: "naked" pattern -> add /services/
     if ( ! $strip ) {
-        // Pokušaj da prepoznamo da li path liči na naše rute bez prefiksa
-        // Uzimamo sve poznate service_category slugove da izbegnemo lažne pozitivne
+        // Try to recognize if the path looks like our routes without a prefix
+        // We get all known service_category slugs to avoid false positives
         $terms = get_terms([
             'taxonomy' => 'service_category',
             'hide_empty' => false,
@@ -523,7 +525,7 @@ public function custom_blog_post_permalinks( $post_link, $post ) {
         if ( ! is_wp_error($terms) && ! empty($terms) ) {
             $first = strtok(ltrim($request_uri, '/'), '/');
             if ( in_array($first, $terms, true) ) {
-                // Ne diramo već validne admin, feed, api itd.
+                // Do not redirect valid admin, feed, api etc. URLs.
                 if ( strpos($request_uri, '/wp-') !== 0 && strpos($request_uri, '/feed') !== 0 && strpos($request_uri, '/wp-json') !== 0 ) {
                     $new_url = '/services' . rtrim($request_uri, '/');
                     $new_url .= '/';

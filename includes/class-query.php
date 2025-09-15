@@ -4,21 +4,21 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class SignatureMedia_Silo_Query {
 
     public function __construct() {
-        // Izvrši POSLE rewrite logike
+        // Execute AFTER rewrite logic
         add_action( 'pre_get_posts', [ $this, 'adjust_main_query' ], 20 );
     }
 
     /**
-     * Podešava glavni query za silo arhive na frontend-u.
+     * Adjusts the main query for silo archives on the frontend.
      */
     public function adjust_main_query( $query ) {
 
-        // 1) Ograniči samo na MAIN QUERY na frontendu (da ne diramo admin/secondary upite)
+        // 1) Limit to the MAIN QUERY on the frontend (to not affect admin/secondary queries)
         if ( is_admin() || ! $query->is_main_query() ) {
             return;
         }
 
-        // 2) Ne diraj single kontekste i specifične rute (ovo si imao, samo premešteno ispod main-query provere)
+        // 2) Do not affect single contexts and specific routes
         if (
             $query->is_singular() ||
             $query->get('silo_problem') ||
@@ -44,13 +44,13 @@ class SignatureMedia_Silo_Query {
             return;
         }
 
-        // 5) Locations archive – koristi METODU nad query objektom (preciznije od globalnog conditional-a)
+        // 5) Locations archive
         if ( $query->is_post_type_archive( 'locations' ) ) {
             $query->set( 'posts_per_page', (int) get_option( 'posts_per_page' ) );
             return;
         }
 
-        // 6) Service Category arhive
+        // 6) Service Category archives
         if ( $query->is_tax( 'service_category' ) ) {
 
             $ppp  = (int) get_option( 'posts_per_page' );
@@ -61,7 +61,7 @@ class SignatureMedia_Silo_Query {
                 return;
             }
 
-            // Da li smo u “problem-signs” grani?
+            // Is this a "problem-signs" branch?
             $is_problem_branch = ( $term->slug === 'problem-signs' );
 
             if ( ! $is_problem_branch && $term->parent ) {
@@ -76,7 +76,7 @@ class SignatureMedia_Silo_Query {
             }
 
             if ( $is_problem_branch ) {
-                // /.../problem-signs/ → samo problemi, BEZ child termina
+                // /.../problem-signs/ -> only problems, NO child terms
                 $query->set( 'post_type', [ 'silo_problem' ] );
                 $query->set( 'posts_per_page', $ppp );
                 $query->set( 'tax_query', [
@@ -84,13 +84,13 @@ class SignatureMedia_Silo_Query {
                         'taxonomy'         => 'service_category',
                         'field'            => 'term_id',
                         'terms'            => (int) $term->term_id,
-                        'include_children' => false, // ključno
+                        'include_children' => false, // key
                     ],
                 ] );
                 return;
             }
 
-            // (Opcionalno) Ako imaš sličnu top-granu “solutions”
+            // (Optional) If you have a similar top-level "solutions" branch
             if ( $term->slug === 'solutions' ) {
                 $query->set( 'post_type', [ 'silo_solution' ] );
                 $query->set( 'posts_per_page', $ppp );
@@ -105,7 +105,7 @@ class SignatureMedia_Silo_Query {
                 return;
             }
 
-            // Default: glavni service čvorovi → miks (ali i dalje strogo filtriran na AKTUELNI termin)
+            // Default: main service nodes -> a mix (but still strictly filtered to the CURRENT term)
             $query->set( 'post_type', [ 'silo_service', 'silo_problem', 'silo_solution' ] );
             $query->set( 'posts_per_page', $ppp );
             $query->set( 'tax_query', [
@@ -113,7 +113,7 @@ class SignatureMedia_Silo_Query {
                     'taxonomy'         => 'service_category',
                     'field'            => 'term_id',
                     'terms'            => (int) $term->term_id,
-                    'include_children' => false, // sprečava leak child-ova na parent listingu
+                    'include_children' => false, // prevents leaking of children on the parent listing
                 ],
             ] );
             return;

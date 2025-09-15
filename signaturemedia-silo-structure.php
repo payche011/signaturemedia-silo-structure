@@ -73,7 +73,7 @@ register_deactivation_hook( __FILE__, [ 'SignatureMedia_Silo_Structure', 'deacti
 /**
  * === GitHub auto-updates via Plugin Update Checker (PUC) ===
  * 1) The repository and server must have the folder:
- *    signaturemedia-silo-structure/
+ * signaturemedia-silo-structure/
  * 2) Add the library to the repo at: lib/plugin-update-checker/
  * 3) On GitHub, publish a Release with a tag (e.g. v2.0.3) and attach a ZIP with THIS folder at the root.
  * 4) (optional) For private/rate-limit: add define('SM_SILO_GH_TOKEN','ghp_...') to wp-config.php.
