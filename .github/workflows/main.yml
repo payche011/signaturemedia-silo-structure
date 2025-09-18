@@ -3,14 +3,18 @@ name: Build & Release plugin
 on:
   push:
     tags:
-      - 'v*'            # run when you push a tag like v2.3.0
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
-  contents: write        # <--- add this here (top level, not inside jobs)
+  contents: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      MAIN_FILE: signaturemedia-silo-structure.php   # <- path to your main plugin file
+      PLUGIN_DIR: signaturemedia-silo-structure      # <- installed plugin folder name
 
     steps:
       - name: Checkout
@@ -18,24 +22,36 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify plugin version matches tag
+      # Get the version from the tag (v1.2.3, v1.2.3a, v1.2.3-beta.1 → 1.2.3, 1.2.3a, 1.2.3-beta.1)
+      - name: Resolve version
         id: ver
         run: |
-          TAG="${GITHUB_REF_NAME}"                 # e.g. v2.3.0
-          VER="${TAG#v}"                           # 2.3.0
-          FILE="signaturemedia-silo-structure.php" # main plugin file in repo root
-          if ! grep -q "Version: ${VER}" "$FILE"; then
-            echo "Plugin header version does not match tag ${VER}"
-            exit 1
+          TAG="${GITHUB_REF_NAME:-manual}"
+          if [ "$TAG" = "manual" ]; then
+            echo "Running manually; set VERSION input if desired."
+            exit 0
           fi
+          VER="${TAG#v}"
           echo "version=${VER}" >> $GITHUB_OUTPUT
 
-      - name: Build ZIP
+      # Rewrite the Version: line in the main plugin file to match the tag (in workspace only)
+      - name: Sync plugin header Version to tag
+        if: steps.ver.outputs.version != ''
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          # Show current version line
+          grep -E '^Version:\s*' "$MAIN_FILE" || true
+          # Replace 'Version: ...' line robustly (handles spaces and CRLF)
+          perl -0777 -pe "s/^Version:\s*.*/Version: ${VER}/m" -i "$MAIN_FILE"
+          echo "After:"
+          grep -E '^Version:\s*' "$MAIN_FILE" || true
+
+      - name: Build ZIP (top-level folder must equal plugin dir)
         run: |
           set -e
-          PLUGIN_DIR="signaturemedia-silo-structure"
-          BUILD_DIR="build"
-          ZIP_NAME="${PLUGIN_DIR}-${GITHUB_REF_NAME}.zip"
+          BUILD_DIR=".build"
+          TAG_NAME="${GITHUB_REF_NAME:-manual}"
+          ZIP_NAME="${PLUGIN_DIR}-${TAG_NAME}.zip"
 
           rm -rf "${BUILD_DIR}"
           mkdir -p "${BUILD_DIR}/${PLUGIN_DIR}"
@@ -45,15 +61,14 @@ jobs:
             --exclude ".github" \
             --exclude ".gitignore" \
             --exclude ".gitattributes" \
-            --exclude "build" \
             --exclude "node_modules" \
+            --exclude "${BUILD_DIR}" \
             ./ "${BUILD_DIR}/${PLUGIN_DIR}/"
 
           (cd "${BUILD_DIR}" && zip -r "../${ZIP_NAME}" "${PLUGIN_DIR}")
-
           echo "ZIP_PATH=${ZIP_NAME}" >> $GITHUB_ENV
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
