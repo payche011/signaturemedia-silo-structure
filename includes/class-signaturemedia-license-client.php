@@ -1,24 +1,24 @@
 <?php
 /**
- * MWS License Client — drop-in klasa za klijentski WordPress plugin
+ * Signature Media License Client — drop-in class for client-side licensing in a WordPress plugin.
  *
  * Usage in your main plugin file:
  *
- * require_once __DIR__ . '/includes/class-mws-license-client.php';
- * $mws_license = new MWS_License_Client([
- * 'product'       => 'signaturemedia-silo-structure', // must match product_slug on the license server
- * 'api_base'      => 'https://licenses.signaturemedia.com/wp-json/mws/v1',
- * 'option_prefix' => 'mws_silo',       // unique option prefix for this plugin
- * 'plugin_file'   => __FILE__,         // absolute path to the main plugin file
- * // 'updates'     => 'server',        // OPTIONAL: enable server-driven updates; default 'none' (we use GitHub)
+ * require_once __DIR__ . '/includes/class-signaturemedia-license-client.php';
+ * $sm_license = new SignatureMedia_License_Client([
+ *   'product'       => 'signaturemedia-silo-structure', // fixed slug on the license server
+ *   'api_base'      => 'https://licenses.signaturemedia.com/wp-json/signaturemedia/v1',
+ *   'option_prefix' => 'sm_silo',        // unique option prefix for this plugin
+ *   'plugin_file'   => __FILE__,         // absolute path to the main plugin file
+ *   // 'updates'     => 'server',         // OPTIONAL (default 'none'); you use GitHub so keep disabled
  * ]);
- * $mws_license->init();
+ * $sm_license->init();
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-if ( ! class_exists( 'MWS_License_Client' ) ) :
-class MWS_License_Client {
+if ( ! class_exists( 'SignatureMedia_License_Client' ) ) :
+class SignatureMedia_License_Client {
 	/** @var string */ private $product;
 	/** @var string */ private $api_base;
 	/** @var string */ private $option_prefix;
@@ -28,9 +28,9 @@ class MWS_License_Client {
 	/** @var string */ private $updates_mode; // 'none' (default) or 'server'
 
 	public function __construct( array $args ) {
-		$this->product         = isset( $args['product'] ) ? sanitize_key( $args['product'] ) : 'mws-silo';
+		$this->product         = isset( $args['product'] ) ? sanitize_key( $args['product'] ) : 'signaturemedia-silo-structure';
 		$this->api_base        = isset( $args['api_base'] ) ? untrailingslashit( esc_url_raw( $args['api_base'] ) ) : '';
-		$this->option_prefix   = isset( $args['option_prefix'] ) ? sanitize_key( $args['option_prefix'] ) : 'mws_product';
+		$this->option_prefix   = isset( $args['option_prefix'] ) ? sanitize_key( $args['option_prefix'] ) : 'sm_product';
 		$this->plugin_file     = isset( $args['plugin_file'] ) ? $args['plugin_file'] : __FILE__;
 		$this->plugin_basename = plugin_basename( $this->plugin_file );
 		$this->slug            = dirname( $this->plugin_basename ); // e.g. signaturemedia-silo-structure
@@ -42,30 +42,30 @@ class MWS_License_Client {
 		add_action( 'admin_menu', [ $this, 'register_settings_page' ] );
 		add_action( 'admin_post_' . $this->option_prefix . '_save_license', [ $this, 'handle_save_license' ] );
 
-		// Link u listi plugina
+		// Link in Plugins list
 		add_filter( 'plugin_action_links_' . $this->plugin_basename, [ $this, 'plugin_action_links' ] );
 
-		// Periodična validacija (twice daily)
+		// Periodic validation (twice daily)
 		add_action( $this->option_prefix . '_validate_event', [ $this, 'schedule_validate' ] );
 		if ( ! wp_next_scheduled( $this->option_prefix . '_validate_event' ) ) {
 			wp_schedule_event( time() + 60, 'twicedaily', $this->option_prefix . '_validate_event' );
 		}
 
-		// OPTIONAL: Server-driven updater (disabled by default; GitHub updater lives in main plugin file)
+		// OPTIONAL: Server-driven updater (disabled by default; GitHub updater is recommended)
 		if ( $this->updates_mode === 'server' ) {
 			add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'inject_update' ] );
 			add_filter( 'plugins_api', [ $this, 'plugins_api' ], 10, 3 );
 		}
 
-		// Deactivate hook → odjavi licencu
+		// Deactivate hook → remote deactivation
 		register_deactivation_hook( $this->plugin_file, [ $this, 'deactivate_license_remote' ] );
 	}
 
 	/* ===================== Settings UI ===================== */
 	public function register_settings_page() : void {
 		add_options_page(
-			'MWS License',
-			'MWS License',
+			'Signature Media License',
+			'Signature Media License',
 			'manage_options',
 			$this->option_prefix . '_license',
 			[ $this, 'render_settings_page' ]
@@ -86,15 +86,15 @@ class MWS_License_Client {
 		$last_error = get_option( $this->option_prefix . '_last_error', '-' );
 		?>
 		<div class="wrap">
-			<h1>MWS License</h1>
+			<h1>Signature Media License</h1>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<?php wp_nonce_field( $this->option_prefix . '_save_license' ); ?>
 				<input type="hidden" name="action" value="<?php echo esc_attr( $this->option_prefix . '_save_license' ); ?>" />
 				<table class="form-table" role="presentation">
 					<tr>
-						<th><label for="mws_license_key">License Key</label></th>
+						<th><label for="sm_license_key">License Key</label></th>
 						<td>
-							<input type="text" id="mws_license_key" name="license_key" class="regular-text" value="<?php echo esc_attr( $key ); ?>" />
+							<input type="text" id="sm_license_key" name="license_key" class="regular-text" value="<?php echo esc_attr( $key ); ?>" />
 							<p class="description">Enter the license key provided by Signature Media.</p>
 						</td>
 					</tr>
@@ -138,8 +138,8 @@ class MWS_License_Client {
 		$args = [
 			'timeout' => 15,
 			'headers' => [ 'Accept' => 'application/json' ],
-			'body'    => $body, // form-encoded okay for WP REST
-			'user-agent' => 'MWS-Client/' . $this->product . ' (' . home_url() . ')',
+			'body'    => $body, // form-encoded is fine for WP REST
+			'user-agent' => 'SignatureMedia-Client/' . $this->product . ' (' . home_url() . ')',
 		];
 		$url = trailingslashit( $this->api_base ) . ltrim( $endpoint, '/' );
 		$res = wp_remote_post( $url, $args );
@@ -154,7 +154,7 @@ class MWS_License_Client {
 		$args = [
 			'timeout' => 15,
 			'headers' => [ 'Accept' => 'application/json' ],
-			'user-agent' => 'MWS-Client/' . $this->product . ' (' . home_url() . ')',
+			'user-agent' => 'SignatureMedia-Client/' . $this->product . ' (' . home_url() . ')',
 		];
 		$url = add_query_arg( $query, trailingslashit( $this->api_base ) . ltrim( $endpoint, '/' ) );
 		$res = wp_remote_get( $url, $args );
@@ -170,7 +170,7 @@ class MWS_License_Client {
 		if ( ! $key ) { return; }
 		$data = $this->remote_post( 'activate', [
 			'license_key' => $key,
-			'product'     => $this->product,
+			'product'     => $this->product,          // server ignores, but fine to send
 			'site'        => $this->normalized_home(),
 		] );
 		$this->store_status_from_response( $data );
@@ -179,10 +179,14 @@ class MWS_License_Client {
 	public function deactivate_license_remote( string $key = '' ) : void {
 		$key = $key ?: get_option( $this->option_prefix . '_license_key', '' );
 		if ( ! $key ) { return; }
+		$site = $this->normalized_home();
+		$mac  = hash_hmac( 'sha256', $key . '|' . $site . '|deactivate', $key ); // must match server rule
+
 		$this->remote_post( 'deactivate', [
 			'license_key' => $key,
-			'product'     => $this->product,
-			'site'        => $this->normalized_home(),
+			'product'     => $this->product, // ignored by server
+			'site'        => $site,
+			'auth'        => $mac,
 		] );
 		delete_option( $this->option_prefix . '_license_status' );
 		update_option( $this->option_prefix . '_last_check', current_time( 'mysql' ), false );
@@ -194,7 +198,7 @@ class MWS_License_Client {
 		if ( ! $key ) { return; }
 		$data = $this->remote_post( 'validate', [
 			'license_key' => $key,
-			'product'     => $this->product,
+			'product'     => $this->product,          // ignored by server
 			'site'        => $this->normalized_home(),
 			'version'     => $this->get_plugin_version(),
 		] );
@@ -301,7 +305,7 @@ class MWS_License_Client {
 			return untrailingslashit( strtolower( $u ) );
 		}
 		$scheme = isset( $parts['scheme'] ) ? $parts['scheme'] : 'https';
-		$host   = $parts['host'];
+		$host   = preg_replace('/^www\./', '', $parts['host']);
 		$path   = isset( $parts['path'] ) ? untrailingslashit( $parts['path'] ) : '';
 		return $scheme . '://' . $host . $path;
 	}

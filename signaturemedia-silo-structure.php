@@ -26,15 +26,15 @@ require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-silo-archive-cpt.php';
 require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-acf-integration.php';
 
 /** License — only handles status/activation; does not block updates */
-require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-mws-license-client.php';
-$mws_license = new MWS_License_Client([
+require_once SIGNATUREMEDIA_SILO_PATH . 'includes/class-signaturemedia-license-client.php';
+$sm_license = new SignatureMedia_License_Client([
   'product'       => 'signaturemedia-silo-structure',
-  'api_base'      => 'https://licenses.signaturemedia.com/wp-json/mws/v1',
-  'option_prefix' => 'mws_silo',
+  'api_base'      => 'https://licenses.signaturemedia.com/wp-json/signaturemedia/v1',
+  'option_prefix' => 'sm_silo',
   'plugin_file'   => __FILE__,
-  // 'updates'     => 'server', // <- leave disabled; using GitHub
+  // 'updates'     => 'server', // keep disabled; you use GitHub updates via PUC
 ]);
-$mws_license->init();
+$sm_license->init();
 
 /** Main class */
 class SignatureMedia_Silo_Structure {
