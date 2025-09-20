@@ -30,7 +30,7 @@ function register_cpt() {
         'show_ui'            => true,
         'show_in_menu'       => 'signature-media',
         'show_in_rest'       => true,
-        'supports'           => ['title','editor'],
+        'supports'           => [ 'title', 'editor', 'thumbnail', 'page-attributes' ],
         'map_meta_cap'       => true,
         'menu_icon'          => 'dashicons-archive',
     ]);
