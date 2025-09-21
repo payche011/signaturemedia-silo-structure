@@ -2,7 +2,7 @@
 /*
 Plugin Name: Signature Media Silo Structure
 Description: Enhanced silo content structure with toggleable features and additional content types.
-Version: 2.3.2
+Version: 2.3.2a
 Author: signaturemedia
 Author URI: https://signaturemedia.com/
 Text Domain: signaturemedia-silo-structure
