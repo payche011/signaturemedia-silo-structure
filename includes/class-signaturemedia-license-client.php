@@ -106,17 +106,7 @@ class SignatureMedia_License_Client {
 			</form>
 
 			<?php if ( ! empty( $stat ) ) : ?>
-				<hr/>
-				<h2>Status</h2>
-				<ul>
-					<li><strong>Valid:</strong> <?php echo $valid ? 'yes' : 'no'; ?></li>
-					<li><strong>Reason:</strong> <?php echo esc_html( $stat['reason'] ?? '-' ); ?></li>
-					<li><strong>Plan:</strong> <?php echo esc_html( $stat['plan'] ?? '-' ); ?></li>
-					<li><strong>Expires:</strong> <?php echo esc_html( $stat['expires_at'] ?? '-' ); ?></li>
-					<li><strong>Sites used:</strong> <?php echo intval( $stat['sites_used'] ?? 0 ); ?> / <?php echo intval( $stat['max_sites'] ?? 0 ); ?></li>
-					<li><strong>Last check:</strong> <?php echo esc_html( get_option( $this->option_prefix . '_last_check', '-' ) ); ?></li>
-					<li><strong>Last error:</strong> <?php echo esc_html( $last_error ); ?></li>
-				</ul>
+				<?php echo $this->render_status_ui( $stat ); ?>
 			<?php endif; ?>
 		</div>
 		<?php
@@ -340,6 +330,131 @@ class SignatureMedia_License_Client {
 		// unknown format
 		return '';
 	}
+
+	/**
+ * Render a compact status card with optional details.
+ */
+	private function render_status_ui( array $stat ) : string {
+		$valid      = ! empty( $stat['valid'] );
+		$reason     = isset( $stat['reason'] ) ? (string) $stat['reason'] : '-';
+		$plan       = isset( $stat['plan'] ) ? (string) $stat['plan'] : '-';
+		$expires_at = isset( $stat['expires_at'] ) ? (string) $stat['expires_at'] : '';
+		$sites_used = isset( $stat['sites_used'] ) ? (int) $stat['sites_used'] : 0;
+		$max_sites  = isset( $stat['max_sites'] ) ? (int) $stat['max_sites'] : 0;
+		$last_check = (string) get_option( $this->option_prefix . '_last_check', '-' );
+		$last_error = (string) get_option( $this->option_prefix . '_last_error', '-' );
+
+		$badge_text  = $valid ? 'Active' : 'Inactive';
+		$badge_class = $valid ? 'sm-badge--ok' : 'sm-badge--bad';
+
+		list( $expires_label, $expires_title ) = $this->format_expiry( $expires_at );
+
+		ob_start();
+		?>
+		<style>
+			/* minimal, scoped styles */
+			.sm-card{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:16px;margin-top:16px}
+			.sm-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+			@media (max-width: 900px){.sm-row{grid-template-columns:1fr}}
+			.sm-kv{display:flex;flex-direction:column;gap:4px}
+			.sm-k{font-weight:600;color:#2c3338}
+			.sm-v{color:#3c434a}
+			.sm-badge{display:inline-block;font-weight:600;padding:2px 8px;border-radius:999px;font-size:12px;line-height:20px;vertical-align:middle}
+			.sm-badge--ok{background:#e6f4ea;color:#137333;border:1px solid #c7e7cc}
+			.sm-badge--bad{background:#fce8e6;color:#c5221f;border:1px solid #f5c6c3}
+			.sm-muted{color:#6c7781}
+			.sm-actions{margin-top:8px}
+			.sm-details{display:none;margin-top:8px;border-top:1px solid #eee;padding-top:12px}
+			.sm-details ul{margin:0;padding-left:18px}
+			.sm-details li{margin:4px 0}
+			.sm-inline-btn{background:none;border:none;padding:0;color:#2271b1;cursor:pointer}
+			.sm-inline-btn:hover{text-decoration:underline}
+		</style>
+
+		<div class="sm-card" aria-live="polite">
+			<div class="sm-row">
+				<div class="sm-kv">
+					<div class="sm-k">Status</div>
+					<div class="sm-v">
+						<span class="sm-badge <?php echo esc_attr( $badge_class ); ?>"><?php echo esc_html( $badge_text ); ?></span>
+						<?php if ( ! $valid && $reason && $reason !== '-' ) : ?>
+							<span class="sm-muted"> – <?php echo esc_html( $reason ); ?></span>
+						<?php endif; ?>
+					</div>
+				</div>
+
+				<div class="sm-kv">
+					<div class="sm-k">Plan</div>
+					<div class="sm-v"><?php echo $plan ? esc_html( $plan ) : '—'; ?></div>
+				</div>
+
+				<div class="sm-kv">
+					<div class="sm-k">Expires</div>
+					<div class="sm-v" title="<?php echo esc_attr( $expires_title ); ?>">
+						<?php echo $expires_label ? esc_html( $expires_label ) : '—'; ?>
+					</div>
+				</div>
+
+				<div class="sm-kv">
+					<div class="sm-k">Sites</div>
+					<div class="sm-v"><?php echo esc_html( $sites_used . ' / ' . $max_sites ); ?></div>
+				</div>
+			</div>
+
+			<div class="sm-actions">
+				<button type="button" class="sm-inline-btn" aria-expanded="false" aria-controls="sm-status-details" id="sm-toggle-details">Details</button>
+			</div>
+
+			<div id="sm-status-details" class="sm-details" role="region" aria-label="License Details">
+				<ul>
+					<li><strong>Reason:</strong> <?php echo esc_html( $reason ?: '-' ); ?></li>
+					<li><strong>Last check:</strong> <?php echo esc_html( $last_check ?: '-' ); ?></li>
+					<li><strong>Last error:</strong> <?php echo esc_html( $last_error ?: '-' ); ?></li>
+				</ul>
+			</div>
+		</div>
+
+		<script>
+			(function(){
+				const btn = document.getElementById('sm-toggle-details');
+				const panel = document.getElementById('sm-status-details');
+				if (!btn || !panel) return;
+				btn.addEventListener('click', function(){
+					const open = panel.style.display === 'block';
+					panel.style.display = open ? 'none' : 'block';
+					btn.setAttribute('aria-expanded', String(!open));
+				});
+			})();
+		</script>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Format expiry date into "YYYY-MM-DD (in X days)" or "expired X days ago".
+	 * Accepts MySQL-ish or ISO strings; returns [label, titleAttr].
+	 */
+	private function format_expiry( string $expires_at ) : array {
+		if ( ! $expires_at ) return [ '', '' ];
+
+		// Try to parse as MySQL/ISO; if fail, return raw
+		$ts = strtotime( $expires_at );
+		if ( ! $ts ) return [ $expires_at, $expires_at ];
+
+		$fmt_date = date_i18n( get_option('date_format') ?: 'Y-m-d', $ts );
+		$now = current_time( 'timestamp' );
+		$days = (int) floor( ($ts - $now) / DAY_IN_SECONDS );
+
+		if ( $days > 0 ) {
+			$label = sprintf( '%s (in %d day%s)', $fmt_date, $days, $days===1?'':'s' );
+		} elseif ( $days === 0 ) {
+			$label = sprintf( '%s (today)', $fmt_date );
+		} else {
+			$label = sprintf( '%s (%d day%s ago)', $fmt_date, abs($days), abs($days)===1?'':'s' );
+		}
+		return [ $label, date_i18n( 'Y-m-d H:i:s', $ts ) ];
+	}
+
 
 	private function normalized_home() : string {
 		$u = home_url();
