@@ -137,18 +137,6 @@ Manage the license under **Settings → Signature Media License**.
 
 ---
 
-## Changelog
-
-### 2.1
-- New **“Strip /services/ from URLs”** switch with safe 301 behavior both ways.
-- **Shadow `silo_archive`** CPT for archive‑level Rank Math SEO + ACF content.
-- Admin pages for **Problem Signs** and **Solutions** ACF management with live preview links.
-- Added **`locations`** CPT (slug: `service-area`) for service‑area landing pages.
-- Safer rewrite priority + manual flush utility.
-- Ensured default `posts_per_page` = **9** on activation.
-
----
-
 ## Uninstall / Deactivation
 
 Deactivation flushes rewrite rules. No custom tables are created by this plugin. Export taxonomy terms and posts if you plan to migrate.
