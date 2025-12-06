@@ -527,8 +527,17 @@ public function custom_blog_post_permalinks( $post_link, $post ) {
             if ( in_array($first, $terms, true) ) {
                 // Do not redirect valid admin, feed, api etc. URLs.
                 if ( strpos($request_uri, '/wp-') !== 0 && strpos($request_uri, '/feed') !== 0 && strpos($request_uri, '/wp-json') !== 0 ) {
-                    $new_url = '/services' . rtrim($request_uri, '/');
-                    $new_url .= '/';
+
+                    // Separate path from query string
+                    $parts = explode('?', $request_uri);
+                    $path = $parts[0];
+                    $query = isset($parts[1]) ? '?' . $parts[1] : '';
+
+                    // Add trailing slash only to the path
+                    $path = rtrim($path, '/');
+                    $path .= '/';
+
+                    $new_url = '/services' . $path . $query;
                     wp_redirect( home_url( $new_url ), 301 );
                     exit;
                 }
