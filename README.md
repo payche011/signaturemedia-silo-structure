@@ -127,13 +127,19 @@ define( 'SM_SILO_FORCE_AUTOUPDATE', true );
 
 ## Licensing (Optional)
 
-Manage the license under **Settings → Signature Media License**.
+An **MWS License** page is available under **Settings → MWS License**. You can enter a license key to validate against Signature Media’s license server. Licensing does **not** block GitHub‑based updates unless you explicitly enable server‑driven updates in code.
 
-- **Add/Change license:** Paste a license key and click **Activate** (or **Revalidate**).
-- **Security:** The key is **encrypted at rest** in the database and **masked** in the UI.
-- **Revalidate:** Leave the field empty and click the button to revalidate the stored key.
-- **Remove license:** Check **“Remove stored license and deactivate”** to clear the key and remotely deactivate it.
-- **Updates:** GitHub-based updates work regardless of licensing; server-driven updates are optional and only used if enabled in code.
+---
+
+## Changelog
+
+### 2.1
+- New **“Strip /services/ from URLs”** switch with safe 301 behavior both ways.
+- **Shadow `silo_archive`** CPT for archive‑level Rank Math SEO + ACF content.
+- Admin pages for **Problem Signs** and **Solutions** ACF management with live preview links.
+- Added **`locations`** CPT (slug: `service-area`) for service‑area landing pages.
+- Safer rewrite priority + manual flush utility.
+- Ensured default `posts_per_page` = **9** on activation.
 
 ---
 

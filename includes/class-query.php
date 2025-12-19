@@ -18,6 +18,11 @@ class SignatureMedia_Silo_Query {
             return;
         }
 
+        // ADD THIS: If we are on a standard Page, do not adjust the query
+        if ( $query->is_page() ) {
+            return;
+        }
+
         // 2) Do not affect single contexts and specific routes
         if (
             $query->is_singular() ||
