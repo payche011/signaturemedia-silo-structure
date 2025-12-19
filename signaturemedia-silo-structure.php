@@ -61,7 +61,8 @@ class SignatureMedia_Silo_Structure {
   public static function activate() {
     if ( class_exists('SignatureMedia_Silo_Post_Types') ) ( new SignatureMedia_Silo_Post_Types() )->register();
     if ( class_exists('SignatureMedia_Silo_Taxonomies') ) ( new SignatureMedia_Silo_Taxonomies() )->register();
-    flush_rewrite_rules();
+    // Set flag for rewrite flush on next load
+    update_option('silo_rewrite_flush_needed', true);
     if ( ! get_option('posts_per_page') || (int)get_option('posts_per_page') !== 9 ) update_option('posts_per_page', 9);
   }
   public static function deactivate() { flush_rewrite_rules(); }

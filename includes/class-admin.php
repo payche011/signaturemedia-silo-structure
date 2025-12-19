@@ -516,19 +516,38 @@ public function solutions_acf_admin_page() {
         update_term_meta($term_id, 'solution_archive_content', $solution_content);
     }
 
+  /**
+     * Prikazuje upozorenje u administraciji ako postoji sukob između slug-ova stranica i kategorija.
+     * Poboljšano sa sigurnosnim ispisom (output escaping) i boljom čitljivošću.
+     */
     public function maybe_show_slug_conflict_notice() {
-    $pages = get_pages(['fields' => 'all']);
-    $page_slugs = wp_list_pluck($pages, 'post_name');
-    $terms = get_terms([
-        'taxonomy' => 'service_category',
-        'hide_empty' => false,
-        'fields' => 'slugs',
-    ]);
+        // Dohvatanje slug-ova svih stranica
+        $pages = get_pages(['fields' => 'all']);
+        $page_slugs = wp_list_pluck($pages, 'post_name');
+        
+        // Dohvatanje slug-ova svih kategorija servisa
+        $terms = get_terms([
+            'taxonomy'   => 'service_category',
+            'hide_empty' => false,
+            'fields'     => 'slugs',
+        ]);
 
-    $conflicts = array_intersect($page_slugs, $terms);
+        // Pronalaženje duplih slug-ova
+        $conflicts = array_intersect($page_slugs, $terms);
 
-    if ( ! empty( $conflicts ) ) {
-        echo '<div class="notice notice-error"><p><strong>Silo Alert:</strong> The following slugs exist as both a Page and a Service Category: <code>' . implode( ', ', $conflicts ) . '</code>. Because of this, the plugin is confused about which one to show. <strong>Recommendation:</strong> Rename the Page or the Category slug to be unique.</p></div>';
+        if ( ! empty( $conflicts ) ) {
+            // SECURITY: Svaki slug se zasebno čisti i pakuje u svoj <code> tag
+            $formatted_conflicts = array_map( function( $slug ) {
+                return '<code>' . esc_html( $slug ) . '</code>';
+            }, $conflicts );
+
+            // Prikaz obaveštenja sa formatiranim konfliktima
+            echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Silo Alert:', 'signaturemedia-silo-structure' ) . '</strong> ' .
+                 sprintf(
+                     esc_html__( 'The following slugs exist as both a Page and a Service Category: %s. Because of this, the plugin is confused about which one to show.', 'signaturemedia-silo-structure' ),
+                     implode( ', ', $formatted_conflicts ) // Sadrži sigurne <code> tagove
+                 ) . ' <strong>' . esc_html__( 'Recommendation:', 'signaturemedia-silo-structure' ) . '</strong> ' .
+                 esc_html__( 'Rename the Page or the Category slug to be unique.', 'signaturemedia-silo-structure' ) . '</p></div>';
+        }
     }
-}
 }

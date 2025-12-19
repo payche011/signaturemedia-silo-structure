@@ -10,7 +10,7 @@ if ( ! class_exists( 'SignatureMedia_Silo_Taxonomies' ) ) {
 class SignatureMedia_Silo_Taxonomies {
 
   public function __construct() {
-    add_action( 'init', [ $this, 'register' ] );
+    add_action( 'init', [ $this, 'register' ], 5 );
   }
 
   public function register() {
@@ -42,7 +42,7 @@ class SignatureMedia_Silo_Taxonomies {
         'new_item_name'              => __( 'New Service Category Name', 'signaturemedia-silo-structure' ),
         'menu_name'                  => __( 'Service Categories', 'signaturemedia-silo-structure' ),
       ],
-      'show_in_menu' => 'signature-media',
+      'show_in_menu' => true,
       'capabilities' => [
         'manage_terms' => 'manage_categories',
         'edit_terms'   => 'manage_categories',

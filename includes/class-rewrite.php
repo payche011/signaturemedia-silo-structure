@@ -132,7 +132,7 @@ class SignatureMedia_Silo_Rewrite {
 
     public function redirect_old_urls() {
     if ( is_admin() ) return;
-    $request_uri = $_SERVER['REQUEST_URI'] ?? '/';
+    $request_uri = isset( $_SERVER['REQUEST_URI'] ) ? esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '/';
     $strip = $this->strip_prefix_enabled();
     
     $path = ltrim( parse_url( $request_uri, PHP_URL_PATH ), '/' );
@@ -195,18 +195,46 @@ class SignatureMedia_Silo_Rewrite {
         return $termlink;
     }
 
+    /**
+     * Rešava konflikte između silo usluga i blog postova koji dele istu putanju.
+     * Optimizovano da prvo proveri uslugu i prekine rad ako je pronađena.
+     */
     public function handle_request_conflicts( $query ) {
+        // Provera da li su naši interni identifikatori prisutni u upitu
         if ( isset( $query['silo_category'] ) && isset( $query['post_identifier'] ) ) {
-            $identifier = $query['post_identifier'];
-            $category_slug = $query['silo_category'];
-            $silo_service = get_posts(['name' => $identifier,'post_type' => 'silo_service','post_status' => 'publish','numberposts' => 1]);
-            $blog_post = get_posts(['name' => $identifier,'post_type' => 'post','post_status' => 'publish','numberposts' => 1]);
-            if ( ! empty( $silo_service ) && has_term($category_slug, 'service_category', $silo_service[0]->ID) ) {
-                $query['post_type'] = 'silo_service'; $query['name'] = $identifier;
-                unset( $query['silo_category'] ); unset( $query['post_identifier'] );
-            } elseif ( ! empty( $blog_post ) && has_term($category_slug, 'service_category', $blog_post[0]->ID) ) {
-                $query['post_type'] = 'post'; $query['name'] = $identifier;
-                unset( $query['silo_category'] ); unset( $query['post_identifier'] );
+            
+            // SECURITY: Sanitizacija promenljivih pre korišćenja u get_posts
+            $identifier    = sanitize_title( $query['post_identifier'] );
+            $category_slug = sanitize_title( $query['silo_category'] );
+            
+            // PERFORMANCE: Prvo proveravamo silo_service (primarni sadržaj)
+            $silo_service = get_posts([
+                'name'        => $identifier,
+                'post_type'   => 'silo_service',
+                'post_status' => 'publish',
+                'numberposts' => 1,
+                'fields'      => 'ids' // Optimizacija: tražimo samo ID
+            ]);
+
+            if ( ! empty( $silo_service ) && has_term( $category_slug, 'service_category', $silo_service[0] ) ) {
+                $query['post_type'] = 'silo_service';
+                $query['name']      = $identifier;
+                unset( $query['silo_category'], $query['post_identifier'] );
+            } else {
+                // PERFORMANCE: Blog post proveravamo SAMO ako usluga nije pronađena
+                $blog_post = get_posts([
+                    'name'        => $identifier,
+                    'post_type'   => 'post',
+                    'post_status' => 'publish',
+                    'numberposts' => 1,
+                    'fields'      => 'ids'
+                ]);
+
+                if ( ! empty( $blog_post ) && has_term( $category_slug, 'service_category', $blog_post[0] ) ) {
+                    $query['post_type'] = 'post';
+                    $query['name']      = $identifier;
+                    unset( $query['silo_category'], $query['post_identifier'] );
+                }
             }
         }
         return $query;

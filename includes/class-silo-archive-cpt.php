@@ -72,7 +72,7 @@ function view_url_for(int $post_id): string {
 // ---- 2) Safe bootstrap (hooks) ----
 function bootstrap() {
 
-    // Metabox for linking (term + type) — keep this one
+    // Metabox for linking (term + type)
     add_action('add_meta_boxes', __NAMESPACE__ . '\\add_silo_link_metabox');
     add_action('save_post_' . CPT, __NAMESPACE__ . '\\save_silo_link');
 
@@ -90,11 +90,12 @@ function bootstrap() {
 
     // Sync ACF field if present
     add_filter('acf/update_value/name=archive_type', function($value, $post_id){
+        // GATEKEEPER: Obezbeđuje da se meta podaci menjaju isključivo za Silo Archive CPT
+        if (get_post_type($post_id) !== CPT) return $value;
+        
         update_post_meta($post_id, META_ARCHIVE_TYPE, $value);
         return $value;
     }, 10, 2);
-
-    // 🗑️ Removed: add_view_frontend_metabox
 
     // Replace “Post updated. View post” link with our real frontend link
     add_filter('post_updated_messages', __NAMESPACE__ . '\\override_updated_messages');
@@ -106,7 +107,7 @@ function bootstrap() {
     add_action('admin_bar_menu', __NAMESPACE__ . '\\admin_bar_buttons', 100);
 }
 
-// ---- Metabox: Silo Link (keep) ----
+// ---- Metabox: Silo Link ----
 function add_silo_link_metabox() {
     add_meta_box('silo_link_box', 'Silo Link', __NAMESPACE__ . '\\render_silo_link_box', CPT, 'side', 'high');
 }
@@ -181,7 +182,6 @@ function override_updated_messages(array $messages): array {
     if ($post && $post->post_type === CPT) {
         $url = view_url_for($post->ID);
 
-        // Force our strings so the link always points right.
         $messages[CPT][1]  = $url
             ? sprintf(__('Silo Archive updated. <a href="%s" target="_blank">View Frontend</a>.'), esc_url($url))
             : __('Silo Archive updated.');
@@ -254,8 +254,8 @@ function detect_archive_context(): array {
     if (!$term || is_wp_error($term)) return [0, ''];
 
     $type = '';
-    if (get_query_var('problem_archive'))  $type = TYPE_PROBLEM;   // 'problem_signs'
-    if (get_query_var('solution_archive')) $type = TYPE_SOLUTION;  // 'solutions'
+    if (get_query_var('problem_archive'))  $type = TYPE_PROBLEM;
+    if (get_query_var('solution_archive')) $type = TYPE_SOLUTION;
 
     return [(int) $term->term_id, (string) $type];
 }
